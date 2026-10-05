@@ -1,0 +1,23 @@
+{% extends "financeiro/base.html" %}
+{% block title %}{{ titulo }} | myfinanceiro{% endblock %}
+{% block content %}
+<header class="top">
+  <div><div class="eyebrow">Formulario</div><h1>{{ titulo }}</h1></div>
+</header>
+<section class="panel">
+  <form method="post" class="form" enctype="multipart/form-data">
+    {% csrf_token %}
+    {% for field in form %}
+      <p{% if field.field.widget.input_type == "textarea" %} class="wide"{% endif %}>
+        {{ field.label_tag }}
+        {{ field.errors }}
+        {{ field }}
+      </p>
+    {% endfor %}
+    <div class="actions wide">
+      <button class="button" type="submit">Salvar</button>
+      <a class="button secondary" href="{% url 'dashboard' %}">Cancelar</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

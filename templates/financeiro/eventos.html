@@ -1,0 +1,27 @@
+{% extends "financeiro/base.html" %}
+{% block title %}Lancamentos | myfinanceiro{% endblock %}
+{% block content %}
+<header class="top">
+  <div><div class="eyebrow">Caixa, faturas e previsoes</div><h1>Lancamentos</h1></div>
+  <a class="button" href="{% url 'evento_novo' %}">Novo lancamento</a>
+</header>
+<section class="panel">
+  <table>
+    <thead><tr><th>Data</th><th>Descricao</th><th>Natureza</th><th>Ambito</th><th>Situacao</th><th class="money">Valor</th></tr></thead>
+    <tbody>
+      {% for evento in eventos %}
+      <tr>
+        <td>{{ evento.data }}</td>
+        <td>{{ evento.descricao }}</td>
+        <td>{{ evento.get_natureza_display }}</td>
+        <td>{{ evento.get_ambito_display }}</td>
+        <td>{{ evento.get_situacao_display }}</td>
+        <td class="money">R$ {{ evento.valor|floatformat:2 }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="6" class="muted">Nenhum lancamento cadastrado.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

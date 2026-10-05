@@ -1,0 +1,19 @@
+{% extends "financeiro/base.html" %}
+{% block title %}Importar OFX | myfinanceiro{% endblock %}
+{% block content %}
+<header class="top">
+  <div><div class="eyebrow">Importacao exclusiva por OFX</div><h1>Importar e revisar</h1></div>
+</header>
+<div class="notice">O arquivo sera salvo como lote em revisao. Registros reconhecidos nao devem ser confirmados como duplicados.</div>
+<section class="panel">
+  <form method="post" enctype="multipart/form-data" class="form">
+    {% csrf_token %}
+    {% for field in form %}
+      <p>{{ field.label_tag }}{{ field.errors }}{{ field }}</p>
+    {% endfor %}
+    <div class="actions wide">
+      <button class="button" type="submit">Enviar para revisao</button>
+    </div>
+  </form>
+</section>
+{% endblock %}

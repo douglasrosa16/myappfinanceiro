@@ -1,0 +1,27 @@
+{% extends "financeiro/base.html" %}
+{% block title %}Revisao OFX | myfinanceiro{% endblock %}
+{% block content %}
+<header class="top">
+  <div><div class="eyebrow">Lote em revisao</div><h1>{{ importacao.nome_arquivo }}</h1></div>
+  <span class="pill">{{ importacao.get_status_display }}</span>
+</header>
+<section class="panel">
+  <h2>Itens identificados</h2>
+  <table>
+    <thead><tr><th>Data</th><th>Identificador</th><th>Descricao</th><th>Status</th><th class="money">Valor</th></tr></thead>
+    <tbody>
+      {% for item in itens %}
+      <tr>
+        <td>{{ item.data|default:"-" }}</td>
+        <td>{{ item.identificador_externo|default:"-" }}</td>
+        <td>{{ item.descricao_original }}</td>
+        <td>{{ item.get_status_display }}</td>
+        <td class="money">R$ {{ item.valor|floatformat:2 }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="5" class="muted">Nenhum item encontrado no OFX.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

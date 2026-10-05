@@ -1,0 +1,46 @@
+{% extends "financeiro/base.html" %}
+{% block title %}Visao geral | myfinanceiro{% endblock %}
+{% block content %}
+<header class="top">
+  <div>
+    <div class="eyebrow">MVP inicial</div>
+    <h1>Visao geral</h1>
+  </div>
+  <a class="button" href="{% url 'evento_novo' %}">Novo lancamento</a>
+</header>
+<div class="notice">Caixa e faturas sao bases separadas. A importacao OFX entra primeiro em revisao para evitar duplicidade.</div>
+<section class="kpis">
+  <div class="card"><div class="muted">Contas ativas</div><div class="value">{{ total_contas }}</div></div>
+  <div class="card"><div class="muted">Cartoes ativos</div><div class="value">{{ total_cartoes }}</div></div>
+  <div class="card"><div class="muted">Pendencias</div><div class="value">{{ total_pendentes }}</div></div>
+  <div class="card"><div class="muted">Saldo por movimentos</div><div class="value">R$ {{ saldo_movimentos|floatformat:2 }}</div></div>
+</section>
+<section class="grid full">
+  <div class="panel">
+    <h2>Ultimos lancamentos</h2>
+    <table>
+      <thead><tr><th>Data</th><th>Descricao</th><th>Situacao</th><th class="money">Valor</th></tr></thead>
+      <tbody>
+        {% for evento in eventos %}
+        <tr><td>{{ evento.data }}</td><td>{{ evento.descricao }}</td><td>{{ evento.get_situacao_display }}</td><td class="money">R$ {{ evento.valor|floatformat:2 }}</td></tr>
+        {% empty %}
+        <tr><td colspan="4" class="muted">Nenhum lancamento cadastrado.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="panel">
+    <h2>Faturas recentes</h2>
+    <table>
+      <thead><tr><th>Cartao</th><th>Ciclo</th><th>Status</th><th class="money">Total</th></tr></thead>
+      <tbody>
+        {% for fatura in faturas %}
+        <tr><td>{{ fatura.cartao }}</td><td>{{ fatura.ciclo }}</td><td>{{ fatura.get_status_display }}</td><td class="money">R$ {{ fatura.total|floatformat:2 }}</td></tr>
+        {% empty %}
+        <tr><td colspan="4" class="muted">Nenhuma fatura cadastrada.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

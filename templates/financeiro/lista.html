@@ -1,0 +1,25 @@
+{% extends "financeiro/base.html" %}
+{% block title %}{{ titulo }} | myfinanceiro{% endblock %}
+{% block content %}
+<header class="top">
+  <div><div class="eyebrow">Cadastro</div><h1>{{ titulo }}</h1></div>
+  <a class="button" href="{% url novo_url %}">Novo</a>
+</header>
+<section class="panel">
+  <table>
+    <thead><tr><th>Nome</th><th>Detalhe</th><th>Situacao</th><th></th></tr></thead>
+    <tbody>
+      {% for objeto in objetos %}
+      <tr>
+        <td>{{ objeto.nome }}</td>
+        <td class="muted">{{ objeto }}</td>
+        <td>{% if objeto.ativa or objeto.ativo %}<span class="pill">Ativo</span>{% else %}<span class="pill">Inativo</span>{% endif %}</td>
+        <td class="money"><a href="{{ objeto.pk }}/editar/">Editar</a></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="4" class="muted">Nenhum registro encontrado.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}
