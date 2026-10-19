@@ -1214,6 +1214,7 @@ class ImportacaoViewSecurityTests(TestCase):
         revisao = self.client.get(reverse("importacao_revisao", args=[self.lote.pk]))
         self.assertContains(revisao, "3 títulos selecionados")
         self.assertContains(revisao, 'name="titulos_alvo_ids"', html=False)
+        self.assertContains(revisao, 'data-item-value="9042.00"', html=False)
 
     def test_salvar_individual_permite_alterar_item_ja_revisado(self):
         item = ItemImportacao.objects.create(

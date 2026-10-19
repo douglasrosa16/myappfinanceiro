@@ -1,5 +1,5 @@
 {% extends "financeiro/base.html" %}
-{% load financeiro_format %}
+{% load financeiro_format l10n %}
 {% block title %}{% if importacao.adaptador == 'cartao_planilha' %}Revisão de planilha{% else %}Revisão OFX{% endif %} | My App Financeiro{% endblock %}
 {% block content %}
 <style>
@@ -99,7 +99,7 @@
           <div class="item-badges"><span class="pill" data-item-status>{{ item.get_status_display }}</span><span class="pill {% if item.revisado_em %}pill-review{% endif %}" data-item-reviewed>{% if item.revisado_em %}Revisado{% else %}Não revisado{% endif %}</span></div>
         </div>
 
-        <form method="post" class="item-editor-grid" data-item-form data-candidate-url="{% url 'importacao_candidatos_vinculo' importacao.pk item.pk %}" data-item-value="{{ item.valor_final }}" data-link-locked="{% if item.status == 'CONCILIADO' and item.evento_id and not item.vinculo_manual_pendente %}true{% else %}false{% endif %}">
+        <form method="post" class="item-editor-grid" data-item-form data-candidate-url="{% url 'importacao_candidatos_vinculo' importacao.pk item.pk %}" data-item-value="{{ item.valor_final|unlocalize }}" data-link-locked="{% if item.status == 'CONCILIADO' and item.evento_id and not item.vinculo_manual_pendente %}true{% else %}false{% endif %}">
           {% csrf_token %}<input type="hidden" name="item_id" value="{{ item.pk }}">
           <input type="hidden" name="titulo_alvo_id" value="{{ item.titulo_alvo_id|default_if_none:'' }}" data-title-target>
           <input type="hidden" name="titulos_alvo_ids" value="{% for vinculo in item.titulos_multiplos_lista %}{{ vinculo.titulo_id }}{% if not forloop.last %},{% endif %}{% endfor %}" data-titles-target>
@@ -279,37 +279,58 @@ function setupLinkPicker(form) {
     (titlesInput?.value || '').split(',').filter(Boolean).map((id) => [String(id), null])
   );
 
-  function valorDoItem() {
-    return Math.abs(Number(form.dataset.itemValue || 0));
+  function valorEmCentavos(valor) {
+    const texto = String(valor ?? '').trim();
+    const normalizado = texto.includes(',') ? texto.replaceAll('.', '').replace(',', '.') : texto;
+    const numero = Number(normalizado);
+    return Number.isFinite(numero) ? Math.round(Math.abs(numero) * 100) : null;
+  }
+
+  function valorDoItemEmCentavos() {
+    return valorEmCentavos(form.dataset.itemValue);
+  }
+
+  function totalTitulosEmCentavos() {
+    const valores = [...selectedTitles.values()].filter(Boolean).map((titulo) => valorEmCentavos(titulo.saldo ?? titulo.valor));
+    return valores.some((valor) => valor === null) ? null : valores.reduce((soma, valor) => soma + valor, 0);
+  }
+
+  function dinheiroEmCentavos(valor) {
+    return moneyFromApi(valor / 100);
   }
 
   function limparSelecaoMultipla() {
     selectedTitles.clear();
     if (titlesInput) titlesInput.value = '';
+    titleInput.value = '';
+    movementInput.value = '';
+    installmentInput.value = '';
     if (saveButton) saveButton.disabled = false;
   }
 
   function atualizarSelecaoTitulos() {
     if (!titlesInput) return;
     if ([...selectedTitles.values()].some((titulo) => !titulo)) return;
-    const titulos = [...selectedTitles.values()].filter(Boolean);
-    const total = titulos.reduce((soma, titulo) => soma + Number(titulo.saldo ?? titulo.valor ?? 0), 0);
-    const diferenca = valorDoItem() - total;
+    const valorItem = valorDoItemEmCentavos();
+    const total = totalTitulosEmCentavos();
     titlesInput.value = [...selectedTitles.keys()].join(',');
-    titleInput.value = '';
-    movementInput.value = '';
-    installmentInput.value = '';
     if (!selectedTitles.size) {
       target.hidden = true;
       if (saveButton) saveButton.disabled = false;
       return;
     }
+    if (valorItem === null || total === null) {
+      if (feedback) feedback.textContent = 'Não foi possível ler o valor do OFX ou de um título. Atualize a página e tente novamente.';
+      if (saveButton) saveButton.disabled = true;
+      return;
+    }
+    const diferenca = valorItem - total;
     targetTitle.textContent = `${selectedTitles.size} título${selectedTitles.size === 1 ? '' : 's'} selecionado${selectedTitles.size === 1 ? '' : 's'}`;
-    targetDetail.textContent = `Selecionado ${moneyFromApi(total)} de ${moneyFromApi(valorDoItem())} · diferença ${moneyFromApi(diferenca)}`;
+    targetDetail.textContent = `Selecionado ${dinheiroEmCentavos(total)} de ${dinheiroEmCentavos(valorItem)} · diferença ${dinheiroEmCentavos(diferenca)}`;
     target.hidden = false;
     if (feedback) feedback.textContent = diferenca === 0
       ? 'A soma está exata. Salve o item para registrar os vínculos.'
-      : `Selecione títulos até totalizar exatamente ${moneyFromApi(valorDoItem())}.`;
+      : `Selecione títulos até totalizar exatamente ${dinheiroEmCentavos(valorItem)}.`;
     if (saveButton) saveButton.disabled = diferenca !== 0;
   }
 
@@ -317,7 +338,20 @@ function setupLinkPicker(form) {
     if (candidate.tipo === 'TITULO') {
       const id = String(candidate.id);
       if (selectedTitles.has(id)) selectedTitles.delete(id);
-      else selectedTitles.set(id, candidate);
+      else {
+        const valorItem = valorDoItemEmCentavos();
+        const valorTitulo = valorEmCentavos(candidate.saldo ?? candidate.valor);
+        const totalAtual = totalTitulosEmCentavos();
+        if (valorItem === null || valorTitulo === null || totalAtual === null) {
+          if (feedback) feedback.textContent = 'Não foi possível ler os valores para validar a seleção.';
+          return;
+        }
+        if (totalAtual + valorTitulo > valorItem) {
+          if (feedback) feedback.textContent = `Este título ultrapassa o valor do OFX de ${dinheiroEmCentavos(valorItem)}.`;
+          return;
+        }
+        selectedTitles.set(id, candidate);
+      }
       atualizarSelecaoTitulos();
       renderCandidates(currentCandidates);
       return;
@@ -414,11 +448,9 @@ function setupLinkPicker(form) {
     if (event.key === 'Enter') { event.preventDefault(); loadCandidates('TODOS'); }
   });
   form.querySelector('[data-clear-link]')?.addEventListener('click', () => {
-    titleInput.value = '';
-    movementInput.value = '';
-    installmentInput.value = '';
     limparSelecaoMultipla();
     target.hidden = true;
+    renderCandidates(currentCandidates);
     if (feedback) feedback.textContent = 'Selecione outro destino para o vínculo.';
   });
   if (action.value === 'VINCULAR' && !titleInput.value && !movementInput.value && !installmentInput.value && form.dataset.linkLocked !== 'true') loadCandidates();
