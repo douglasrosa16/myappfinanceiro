@@ -1,0 +1,69 @@
+{% load financeiro_format %}
+<div class="transactions-table-wrap">
+  <table class="transactions-table">
+    <thead>
+      <tr>
+        <th>Data original</th>
+        <th>Descrição / pessoa</th>
+        <th>Conta / cartão</th>
+        <th>Categoria / situação</th>
+        <th class="money">{% if valor_indicador %}Valor no indicador{% else %}Valor{% endif %}</th>
+        {% if mostrar_acoes %}<th>Ações</th>{% endif %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for linha in linhas %}
+      <tr class="transaction-main-row{% if linha.observacao %} has-observation{% endif %}">
+        <td>
+          {% if linha.agrupada_fatura %}
+            {{ linha.data_referencia|date:"d/m/Y" }}
+            <div class="source">{% if linha.fatura_status == "ABERTA" %}Vencimento previsto{% else %}Vencimento da fatura{% endif %}</div>
+            <div class="source">Ciclo: {{ linha.ciclo_fatura }}</div>
+          {% else %}
+            {{ linha.data_original|date:"d/m/Y" }}
+            {% if linha.vencimento_fatura %}
+              <div class="source">Vcto: {{ linha.vencimento_fatura|date:"d/m/Y" }}</div>
+            {% endif %}
+            {% if linha.ciclo_fatura %}
+              <div class="source">Ciclo: {{ linha.ciclo_fatura }}</div>
+            {% endif %}
+          {% endif %}
+        </td>
+        <td class="description">
+          {{ linha.descricao }}
+          {% if linha.agrupada_fatura %}
+            <br><span class="pill">{{ linha.quantidade_lancamentos_agrupados }} lançamento{{ linha.quantidade_lancamentos_agrupados|pluralize:"s" }}</span>
+          {% else %}
+            {% if linha.possui_parcela %}<br><span class="pill">Parcela {{ linha.parcela_numero }}/{{ linha.parcela_total }}</span>{% endif %}
+            {% if linha.recorrencia_numero %}<br><span class="pill">Recorrência {{ linha.recorrencia_numero }}/{{ linha.recorrencia_total }}</span>{% endif %}
+            <div class="source">{{ linha.pessoa }} • {{ linha.ambito }}</div>
+          {% endif %}
+        </td>
+        <td class="source-name">{{ linha.origem_nome }}<div class="source">{{ linha.origem_tipo }}</div></td>
+        <td class="category-cell">{{ linha.categoria }}<div class="source">{{ linha.situacao }}</div></td>
+        {% if valor_indicador %}
+          <td class="money {{ linha.valor|classe_valor:'saida' }}">{{ linha.valor|brl_sinal }}</td>
+        {% else %}
+          <td class="money {{ linha.valor|classe_valor }}">{{ linha.valor|brl_sinal }}</td>
+        {% endif %}
+        {% if mostrar_acoes %}
+        <td>{% if not linha.agrupada_fatura %}<div class="row-actions">
+          <a class="icon-button icon-edit" href="{{ linha.editar_url }}?return_to=eventos&amp;{{ filtros_query }}" data-modal-url="{{ linha.editar_url }}?return_to=eventos&amp;{{ filtros_query }}" data-modal-title="Editar lançamento" title="Editar" aria-label="Editar lançamento"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></a>
+          <a class="icon-button icon-clone" href="{{ linha.clonar_url }}?return_to=eventos&amp;{{ filtros_query }}" data-modal-url="{{ linha.clonar_url }}?return_to=eventos&amp;{{ filtros_query }}" data-modal-title="Clonar lançamento" title="Clonar" aria-label="Clonar lançamento"><svg viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg></a>
+          <button class="icon-button icon-delete" type="button" data-action="{{ linha.excluir_url }}?return_to=eventos&amp;{{ filtros_query }}" data-confirm-delete="Excluir {{ linha.descricao }}?" data-recorrencia-futuros="{{ linha.recorrencia_futuros }}" title="Excluir" aria-label="Excluir lançamento"><svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg></button>
+        </div>{% endif %}</td>
+        {% endif %}
+      </tr>
+      {% if linha.observacao %}
+      <tr class="transaction-observation-row">
+        <td colspan="4"><div class="transaction-observation"><strong>Observação:</strong> <span>{{ linha.observacao }}</span></div></td>
+        <td class="transaction-observation-filler" aria-hidden="true"></td>
+        {% if mostrar_acoes %}<td class="transaction-observation-filler" aria-hidden="true"></td>{% endif %}
+      </tr>
+      {% endif %}
+      {% empty %}
+      <tr><td colspan="{% if mostrar_acoes %}6{% else %}5{% endif %}" class="empty">{{ mensagem_vazia|default:"Nenhum lançamento com esses filtros." }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

@@ -1,0 +1,168 @@
+{% extends "financeiro/base.html" %}
+{% load financeiro_format %}
+{% block title %}Parcelas futuras | My App Financeiro{% endblock %}
+{% block content %}
+<style>
+  .future-page{max-width:1600px}
+  .future-page .top{margin-bottom:22px}
+  .future-period{display:flex;align-items:center;gap:12px;font-size:14px}
+  .future-period select{width:auto;min-width:112px}
+  .future-filters{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:22px}
+  .future-filter-grid{display:flex;gap:12px;align-items:end;flex-wrap:wrap}
+  .future-filter-grid label{display:grid;gap:5px;flex:1;min-width:240px;font-size:14px}
+  .future-filter-grid select{width:100%}
+  .future-filter-note{font-size:14px;color:var(--muted);margin:10px 0 0}
+  .future-panel{border-radius:12px;margin-top:22px}
+  .future-panel .collapsible-summary{padding:22px}
+  .future-panel .collapsible-content{padding:0 22px 22px}
+  .future-panel h2{font-size:20px;margin:0}
+  .future-panel .future-explanation{margin:0 0 18px}
+  .future-bars{display:grid;gap:15px}
+  .future-bar-label{display:flex;justify-content:space-between;gap:16px;margin-bottom:7px;font-size:14px}
+  .future-bar-label strong{white-space:nowrap}
+  .future-track{height:9px;border-radius:10px;background:#eef2f8;overflow:hidden}
+  .future-fill{height:100%;border-radius:10px;background:var(--danger)}
+  .future-table-wrap{overflow-x:auto}
+  .future-panel table{min-width:940px;font-size:14px}
+  .future-panel th{white-space:nowrap}
+  .future-panel td:first-child,.future-panel .money{white-space:nowrap}
+  .future-description{min-width:280px;max-width:460px;overflow-wrap:anywhere}
+  .future-source{min-width:180px}
+  .future-category{min-width:180px}
+  .future-description .pill{display:inline-block;margin-top:5px;background:#edf2fa;color:var(--blue)}
+  .future-empty{text-align:center;color:var(--muted);padding:28px}
+  .future-footer{font-size:14px;color:var(--muted);margin-top:28px}
+  @media(max-width:700px){
+    .future-page .top{align-items:flex-start;flex-direction:column}
+    .future-period{width:100%;justify-content:space-between}
+    .future-filter-grid label{min-width:100%}
+    .future-filter-grid .secondary{width:100%}
+    .future-panel .collapsible-summary{padding:16px}
+    .future-panel .collapsible-content{padding:0 16px 16px}
+  }
+</style>
+<div class="future-page">
+  <form id="futureFilters" method="get"></form>
+  <header class="top">
+    <div>
+      <div class="eyebrow">Finanças pessoais e profissionais</div>
+      <h1>Parcelas futuras</h1>
+    </div>
+    <label class="future-period" for="futureCycleFilter">
+      <span>Período</span>
+      <select id="futureCycleFilter" name="cycle" form="futureFilters" aria-label="Período de referência">
+        {% for ciclo in ciclos %}
+          <option value="{{ ciclo.valor }}"{% if ciclo.valor == ciclo_selecionado %} selected{% endif %}>{{ ciclo.rotulo }}</option>
+        {% endfor %}
+      </select>
+    </label>
+  </header>
+
+  <section class="future-filters" aria-label="Filtros de conta e cartão">
+    <div class="future-filter-grid">
+      <label for="futureAccountFilter">Conta financeira
+        <select id="futureAccountFilter" name="account" form="futureFilters">
+          <option value="all">Todas as contas</option>
+          {% for conta in contas %}
+            <option value="{{ conta.pk }}"{% if conta_selecionada.pk == conta.pk %} selected{% endif %}>{{ conta.nome }}{% if not conta.ativa %} (inativa){% endif %}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label for="futureCardFilter">Cartão de crédito
+        <select id="futureCardFilter" name="card" form="futureFilters">
+          <option value="all">Todos os cartões</option>
+          {% for cartao in cartoes_compativeis %}
+            <option value="{{ cartao.pk }}"{% if cartao_selecionado.pk == cartao.pk %} selected{% endif %}>{{ cartao.nome }}{% if not cartao.ativo %} (inativo){% endif %}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <a class="secondary" href="?cycle={{ ciclo_selecionado }}">Limpar filtros</a>
+    </div>
+    <p class="future-filter-note">Conta: filtra movimentos e cartões vinculados. Cartão: filtra faturas; nos lançamentos, mostra o cartão e seus pagamentos vinculados.</p>
+  </section>
+
+  <details class="panel full future-panel collapsible-panel future-purchases-panel" aria-labelledby="futurePurchasesTitle" open>
+    <summary class="collapsible-summary" title="Abrir ou fechar a lista de compras parceladas">
+      <h2 id="futurePurchasesTitle">Compras parceladas até o ciclo selecionado <span class="collapsible-summary-meta">{{ quantidade_compras }} compra{{ quantidade_compras|pluralize:"s" }} · <span class="{{ total_compras|classe_valor:'saida' }}">{{ total_compras|brl }}</span></span></h2>
+      <span class="collapsible-toggle" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
+      </span>
+    </summary>
+    <div class="collapsible-content">
+      <div class="future-table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Data original</th>
+              <th>Descrição / pessoa</th>
+              <th>Cartão / ciclo</th>
+              <th>Categoria / situação</th>
+              <th class="money">Valor</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for compra in compras %}
+              <tr>
+                <td>{{ compra.data_original|date:"d/m/Y" }}</td>
+                <td class="future-description">
+                  {{ compra.descricao }}<br>
+                  <span class="pill">Parcela {{ compra.numero }}/{{ compra.total }}</span>
+                  <div class="source">{{ compra.pessoa }} • {{ compra.ambito }}</div>
+                </td>
+                <td class="future-source">
+                  {{ compra.cartao.nome }}{% if not compra.cartao.ativo %} (inativo){% endif %}
+                  <div class="source">Último ciclo: {{ compra.ultimo_ciclo }}</div>
+                </td>
+                <td class="future-category">
+                  {{ compra.categoria }}
+                  <div class="source">{{ compra.situacao }}</div>
+                </td>
+                <td class="money {{ compra.valor|classe_valor:'saida' }}">{{ compra.valor|brl }}</td>
+              </tr>
+            {% empty %}
+              <tr><td class="future-empty" colspan="5">Nenhuma parcela neste filtro.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </details>
+
+  <details class="panel full future-panel collapsible-panel future-projections-panel" aria-labelledby="futureBarsTitle" open>
+    <summary class="collapsible-summary" title="Abrir ou fechar as parcelas conhecidas">
+      <h2 id="futureBarsTitle">Parcelas conhecidas após {{ ciclo_selecionado }}</h2>
+      <span class="collapsible-toggle" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
+      </span>
+    </summary>
+    <div class="collapsible-content">
+      <p class="small future-explanation">Estimativa pela parcela mais recente de cada compra. Previsões cadastradas preservam o valor de cada parcela. Contratos recorrentes, antecipações e novas compras podem mudar o total.</p>
+      {% if projecoes %}
+        <div class="future-bars">
+          {% for projecao in projecoes %}
+            <div>
+              <div class="future-bar-label">
+                <span>{{ projecao.ciclo }}</span>
+                <strong class="{{ projecao.total|classe_valor:'saida' }}">{{ projecao.total|brl }}</strong>
+              </div>
+              <div class="future-track"><div class="future-fill" style="width:{{ projecao.percentual }}%"></div></div>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="future-empty">Nenhuma parcela futura neste filtro.</p>
+      {% endif %}
+    </div>
+  </details>
+
+  <footer class="future-footer">Conta corrente: movimentos do extrato. Cartão: composição por fatura. Pagamento da fatura aparece no caixa e não é contado novamente como despesa.</footer>
+</div>
+<script>
+  (() => {
+    const filterForm = document.getElementById('futureFilters');
+    ['futureCycleFilter', 'futureAccountFilter', 'futureCardFilter'].forEach((id) => {
+      document.getElementById(id)?.addEventListener('change', () => filterForm.requestSubmit());
+    });
+  })();
+</script>
+{% endblock %}

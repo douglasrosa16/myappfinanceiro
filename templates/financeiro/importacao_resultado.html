@@ -1,0 +1,19 @@
+{% extends "financeiro/base.html" %}
+{% load financeiro_format %}
+{% block title %}{% if importacao.adaptador == 'cartao_planilha' %}Resultado da planilha{% else %}Resultado OFX{% endif %} | My App Financeiro{% endblock %}
+{% block content %}
+<header class="top"><div><div class="eyebrow">Resultado do lote #{{ importacao.pk }}</div><h1>{{ importacao.nome_arquivo }}</h1><div class="small">{{ importacao.get_origem_display }} · {{ importacao.conta|default:importacao.cartao }}{% if importacao.ciclo %} · {{ importacao.ciclo }}{% endif %}</div></div><span class="pill">{{ importacao.get_status_display }}</span></header>
+<div class="kpis"><div class="card"><div class="muted">Itens</div><div class="value">{{ resumo.quantidade }}</div></div><div class="card"><div class="muted">Novos</div><div class="value">{{ resumo.contagens.NOVO }}</div></div><div class="card"><div class="muted">Conciliados</div><div class="value">{{ resumo.contagens.CONCILIADO }}</div></div>{% if importacao.adaptador == 'cartao_planilha' %}<div class="card"><div class="muted">Planejados</div><div class="value">{{ resumo.contagens.PLANEJADO }}</div></div>{% else %}<div class="card"><div class="muted">Valor líquido</div><div class="value {{ resumo.total|classe_valor }}">{{ resumo.total|brl }}</div></div>{% endif %}</div>
+<details class="panel full collapsible-panel import-result-items">
+  <summary class="collapsible-summary" title="Abrir ou fechar os itens da importação finalizada">
+    <h2>Rastreabilidade <span class="collapsible-summary-meta">{{ resumo.quantidade }} itens · <span class="{{ resumo.total|classe_valor }}">{{ resumo.total|brl }}</span></span></h2>
+    <span class="collapsible-toggle" aria-hidden="true">
+      <svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
+    </span>
+  </summary>
+  <div class="collapsible-content">
+    <table><thead><tr><th>Data</th><th>Descrição</th><th>Status</th><th>Destino</th><th class="money">Valor</th></tr></thead><tbody>{% for item in itens %}<tr><td>{{ item.data_final|date:"d/m/Y" }}</td><td>{{ item.descricao_final }}</td><td>{% if item.status == 'PLANEJADO' %}Planejado{% else %}{{ item.get_status_display }}{% endif %}</td><td>{% if item.evento %}Lançamento #{{ item.evento_id }}{% elif item.acao == 'IGNORAR' %}Ignorado{% else %}-{% endif %}</td><td class="money {{ item.valor_final|classe_valor }}">{{ item.valor_final|brl }}</td></tr>{% endfor %}</tbody></table>
+  </div>
+</details>
+<div class="actions"><a class="secondary" href="{% url 'importar_ofx' %}">Nova importação</a>{% if importacao.status == 'CONFIRMADA' %}<form method="post" action="{% url 'importacao_desfazer' importacao.pk %}">{% csrf_token %}<button class="secondary danger" type="submit">Desfazer importação</button></form>{% endif %}</div>
+{% endblock %}

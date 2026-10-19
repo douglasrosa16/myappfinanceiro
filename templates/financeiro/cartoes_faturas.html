@@ -1,0 +1,272 @@
+{% extends "financeiro/base.html" %}
+{% load financeiro_format %}
+{% block title %}Cartões e faturas | myfinanceiro{% endblock %}
+{% block content %}
+<style>
+  .invoice-page{max-width:1600px}
+  .invoice-page .top{margin-bottom:22px}
+  .invoice-period{display:flex;align-items:center;gap:12px;font-size:14px}
+  .invoice-period select{width:auto;min-width:112px}
+  .invoice-filters{background:#fff;border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:22px}
+  .invoice-filter-grid{display:flex;gap:12px;align-items:end;flex-wrap:wrap}
+  .invoice-filter-grid label{display:grid;gap:5px;flex:1;min-width:240px;font-size:14px}
+  .invoice-filter-grid select{width:100%}
+  .invoice-filter-note{font-size:14px;color:var(--muted);margin:10px 0 0}
+  .invoice-heading{display:flex;justify-content:space-between;align-items:center;gap:16px;margin:0 0 18px}
+  .invoice-heading h2{margin:0}
+  .invoice-page .kpis{margin-bottom:22px}
+  .invoice-page .card,.invoice-page .panel{border-radius:12px}
+  .invoice-page .card .label{font-size:14px;color:var(--muted)}
+  .invoice-page .value{letter-spacing:-.7px}
+  .invoice-items{padding:0}
+  .invoice-table-wrap{overflow-x:auto}
+  .invoice-items table{min-width:820px}
+  .invoice-items th{white-space:nowrap}
+  .invoice-items td:first-child{white-space:nowrap}
+  .invoice-items .item-description{min-width:300px}
+  .invoice-empty{text-align:center;color:var(--muted);padding:28px}
+  .invoice-action-disabled{font-size:14px;color:var(--muted)}
+  .invoice-closing{margin-top:22px}
+  .invoice-closing h2{margin-bottom:8px}
+  .invoice-list{display:grid;gap:8px;margin:14px 0 18px}
+  .invoice-choice{display:flex;justify-content:space-between;gap:14px;align-items:center;border:1px solid var(--line);border-radius:8px;padding:11px 13px;background:#fff}
+  .invoice-choice.is-selected{border-color:var(--blue);box-shadow:0 0 0 2px #2563eb18}
+  .invoice-choice .meta{display:flex;gap:10px;flex-wrap:wrap;color:var(--muted);font-size:14px}
+  .invoice-actions{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0}
+  .closing-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:16px 0}
+  .closing-grid article{background:#f7f9fc;border:1px solid var(--line);border-radius:8px;padding:12px}
+  .closing-grid strong{display:block;font-size:19px;margin-top:4px}
+  .closing-history{margin:16px 0 0;padding:0;list-style:none;display:grid;gap:8px}
+  .closing-history li{border-left:3px solid #dce3ec;padding-left:10px;font-size:14px}
+  .invoice-footer{font-size:14px;color:var(--muted);margin-top:28px}
+  @media(max-width:1100px){
+    .invoice-page .kpis{grid-template-columns:repeat(2,1fr)}
+  }
+  @media(max-width:700px){
+    .invoice-page .top{align-items:flex-start;flex-direction:column}
+    .invoice-period{width:100%;justify-content:space-between}
+    .invoice-filter-grid label{min-width:100%}
+    .invoice-filter-grid .secondary{width:100%}
+    .invoice-heading{align-items:flex-start;flex-direction:column}
+    .invoice-page .kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+    .invoice-page .card,.invoice-page .panel{padding:16px}
+    .invoice-page .invoice-items{padding:0}
+    .collapsible-summary{padding:16px}
+    .collapsible-content{padding:0 16px 16px}
+    .invoice-page .value{font-size:23px}
+  }
+</style>
+<div class="invoice-page">
+  <form id="invoiceFilters" method="get"></form>
+  <header class="top">
+    <div>
+      <div class="eyebrow">Finanças pessoais e profissionais</div>
+      <h1>Cartões e faturas</h1>
+    </div>
+    <label class="invoice-period" for="cycleFilter">
+      <span>Período</span>
+      <select id="cycleFilter" name="cycle" form="invoiceFilters" aria-label="Período da fatura">
+        {% if ciclos %}
+          {% for ciclo in ciclos %}
+            <option value="{{ ciclo.valor }}"{% if ciclo.valor == ciclo_selecionado %} selected{% endif %}>{{ ciclo.rotulo }}</option>
+          {% endfor %}
+        {% else %}
+          <option value="{{ ciclo_selecionado }}" selected>{{ ciclo_rotulo }}</option>
+        {% endif %}
+      </select>
+    </label>
+  </header>
+
+  <section class="invoice-filters" aria-label="Filtros de conta e cartão">
+    <div class="invoice-filter-grid">
+      <label for="accountFilter">Conta financeira
+        <select id="accountFilter" name="account" form="invoiceFilters">
+          <option value="all">Todas as contas</option>
+          {% for conta in contas %}
+            <option value="{{ conta.pk }}"{% if conta_selecionada.pk == conta.pk %} selected{% endif %}>{{ conta.nome }}{% if not conta.ativa %} (inativa){% endif %}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label for="cardFilter">Cartão de crédito
+        <select id="cardFilter" name="card" form="invoiceFilters">
+          <option value="all">Todos os cartões</option>
+          {% for cartao in cartoes_compativeis %}
+            <option value="{{ cartao.pk }}"{% if cartao_selecionado.pk == cartao.pk %} selected{% endif %}>{{ cartao.nome }}{% if not cartao.ativo %} (inativo){% endif %}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <a class="secondary" href="?cycle={{ ciclo_selecionado }}">Limpar filtros</a>
+    </div>
+    <p class="invoice-filter-note">Conta filtra os cartões vinculados. A composição abaixo considera compras, parcelas, tarifas e créditos da fatura.</p>
+  </section>
+
+  <div class="invoice-heading">
+    <h2>Fatura {{ ciclo_selecionado }}</h2>
+    <a
+      class="button"
+      href="{% url 'compra_cartao_nova' %}?cycle={{ ciclo_selecionado }}{% if cartao_selecionado %}&amp;card={{ cartao_selecionado.pk }}{% endif %}"
+      data-modal-url="{% url 'compra_cartao_nova' %}?cycle={{ ciclo_selecionado }}{% if cartao_selecionado %}&amp;card={{ cartao_selecionado.pk }}{% endif %}"
+      data-modal-title="Nova compra"
+    >Nova compra</a>
+  </div>
+
+  <section class="kpis" aria-label="Indicadores da fatura">
+    <article class="card">
+      <div class="label">Débitos projetados</div>
+      <div class="value {{ totais.debitos|classe_valor:'saida' }}">{{ totais.debitos|brl }}</div>
+      <div class="small">Compras, parcelas e tarifas</div>
+    </article>
+    <article class="card">
+      <div class="label">Créditos / estornos projetados</div>
+      <div class="value {{ totais.creditos|classe_valor }}">{{ totais.creditos|brl }}</div>
+      <div class="small">Sem pagamento da fatura anterior</div>
+    </article>
+    <article class="card">
+      <div class="label">Total líquido projetado</div>
+      <div class="value {{ totais.liquido|classe_valor:'saida' }}">{{ totais.liquido|brl }}</div>
+      <div class="small">Cartões selecionados</div>
+    </article>
+    <article class="card">
+      <div class="label">Parcelas neste ciclo</div>
+      <div class="value {{ totais.parcelas|classe_valor:'saida' }}">{{ totais.parcelas|brl }}</div>
+      <div class="small">Somente itens com marcador</div>
+    </article>
+  </section>
+
+  <details class="panel full invoice-items collapsible-panel">
+    <summary class="collapsible-summary" title="Abrir ou fechar a lista de itens">
+      <h2>Itens da fatura</h2>
+      <span class="collapsible-toggle" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
+      </span>
+    </summary>
+    <div class="collapsible-content">
+      <div class="invoice-table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Data original</th>
+            <th>Descrição</th>
+            <th>Cartão</th>
+            <th>Parcela</th>
+            <th class="money">Valor</th>
+            <th>Ação</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in itens %}
+            <tr>
+              <td>{{ item.data_original|date:"d/m/Y" }}</td>
+              <td class="item-description">{{ item.descricao }}</td>
+              <td>{{ item.cartao.nome }}{% if not item.cartao.ativo %} (inativo){% endif %}</td>
+              <td>{{ item.marcador }}</td>
+              <td class="money {{ item.valor_assinado|classe_valor }}">{{ item.valor_assinado|brl_sinal }}</td>
+              <td>
+                {% if item.parcela.fatura.status == "FECHADA" or item.parcela.fatura.status == "PAGA" %}
+                  <span class="invoice-action-disabled">Fechada</span>
+                {% else %}
+                  <a
+                    class="icon-button icon-edit"
+                    href="{% url 'parcela_cartao_editar' item.parcela.pk %}"
+                    data-modal-url="{% url 'parcela_cartao_editar' item.parcela.pk %}"
+                    data-modal-title="Editar item da fatura"
+                    title="Editar"
+                    aria-label="Editar item da fatura"
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+                  </a>
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td class="invoice-empty" colspan="6">Nenhum item neste filtro.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+    </div>
+  </details>
+
+  <section class="panel invoice-closing">
+    <h2>Fechamento e pagamento</h2>
+    {% if resumo_faturas %}
+      <p class="small">Em visão consolidada, selecione uma fatura individual antes de executar ações.</p>
+      <div class="invoice-list" aria-label="Faturas disponíveis">
+        {% for resumo in resumo_faturas %}
+          <a class="invoice-choice{% if painel and painel.fatura.pk == resumo.fatura.pk %} is-selected{% endif %}" href="?cycle={{ ciclo_selecionado }}{% if conta_selecionada %}&amp;account={{ conta_selecionada.pk }}{% endif %}{% if cartao_selecionado %}&amp;card={{ cartao_selecionado.pk }}{% endif %}&amp;invoice={{ resumo.fatura.pk }}">
+            <span><strong>{{ resumo.fatura.cartao.nome }}</strong> · {{ resumo.fatura.ciclo }}</span>
+            <span class="meta"><span>{{ resumo.fatura.get_status_display }}</span><span>Fatura confirmada <span class="{{ resumo.total_confirmado|classe_valor:'saida' }}">{{ resumo.total_confirmado|brl }}</span></span><span>Fatura projetada <span class="{{ resumo.total_projetado|classe_valor:'saida' }}">{{ resumo.total_projetado|brl }}</span></span><span>{{ resumo.pendencias }} pendência(s)</span></span>
+          </a>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    {% if painel %}
+      <div class="closing-grid">
+        <article><span class="small">Fatura confirmada</span><strong class="{{ painel.total_confirmado|classe_valor:'saida' }}">{{ painel.total_confirmado|brl }}</strong></article>
+        <article><span class="small">Fatura projetada</span><strong class="{{ painel.total_projetado|classe_valor:'saida' }}">{{ painel.total_projetado|brl }}</strong></article>
+        <article><span class="small">Saldo transportado</span><strong class="{{ painel.fatura.total_transportado|classe_valor:'saida' }}">{{ painel.fatura.total_transportado|brl }}</strong></article>
+        <article><span class="small">Saldo exigível</span><strong class="{{ painel.fatura.total_exigido|classe_valor:'saida' }}">{{ painel.fatura.total_exigido|brl }}</strong></article>
+        <article><span class="small">Saldo aberto</span><strong{% if painel.titulo %} class="{{ painel.titulo.saldo_aberto|classe_valor:'saida' }}"{% endif %}>{% if painel.titulo %}{{ painel.titulo.saldo_aberto|brl }}{% else %}—{% endif %}</strong></article>
+      </div>
+      <p class="small">Vencimento: {{ painel.fatura.vencimento|date:"d/m/Y"|default:"não definido" }} · Conta padrão: {% if painel.titulo and painel.titulo.conta %}{{ painel.titulo.conta.nome }}{% else %}não definida{% endif %}.</p>
+      <p class="notice">{{ painel.acoes.orientacao }}</p>
+      <div class="invoice-actions">
+        {% if painel.acoes.pode_fechar %}
+          <a class="button" href="{% url 'fatura_fechar' painel.fatura.pk %}" data-modal-url="{% url 'fatura_fechar' painel.fatura.pk %}" data-modal-title="Conferir e fechar fatura">Conferir e fechar</a>
+        {% endif %}
+        {% if painel.acoes.pode_operar_saldo %}
+          <a class="secondary" href="{% url 'fatura_programar_pagamento' painel.titulo.pk %}" data-modal-url="{% url 'fatura_programar_pagamento' painel.titulo.pk %}" data-modal-title="Programar pagamento">Programar pagamento</a>
+          <a class="secondary" href="{% url 'fatura_conciliar_pagamento' painel.titulo.pk %}" data-modal-url="{% url 'fatura_conciliar_pagamento' painel.titulo.pk %}" data-modal-title="Conciliar pagamento">Conciliar pagamento</a>
+          <a class="secondary" href="{% url 'fatura_pagamento_manual' painel.titulo.pk %}" data-modal-url="{% url 'fatura_pagamento_manual' painel.titulo.pk %}" data-modal-title="Registrar pagamento manual">Registrar pagamento manual</a>
+          <a class="secondary" href="{% url 'fatura_transportar_saldo' painel.titulo.pk %}" data-modal-url="{% url 'fatura_transportar_saldo' painel.titulo.pk %}" data-modal-title="Transportar saldo">Transportar saldo</a>
+        {% endif %}
+        {% if painel.acoes.pode_reabrir %}
+          <a class="secondary" href="{% url 'fatura_reabrir' painel.fatura.pk %}" data-modal-url="{% url 'fatura_reabrir' painel.fatura.pk %}" data-modal-title="Reabrir ou corrigir fatura">Reabrir/Corrigir fechamento</a>
+        {% endif %}
+      </div>
+
+      {% if painel.programacoes %}
+        <h3>Programações de pagamento</h3>
+        <div class="invoice-table-wrap"><table><thead><tr><th>Data</th><th>Conta</th><th>Situação</th><th class="money">Programado</th><th class="money">Realizado</th></tr></thead><tbody>
+          {% for programacao in painel.programacoes %}<tr><td>{{ programacao.data_programada|date:"d/m/Y" }}</td><td>{{ programacao.conta.nome }}</td><td>{{ programacao.get_status_display }}</td><td class="money {{ programacao.valor_programado|classe_valor:'saida' }}">{{ programacao.valor_programado|brl }}</td><td class="money {{ programacao.valor_realizado|classe_valor:'saida' }}">{{ programacao.valor_realizado|brl }}</td></tr>{% endfor %}
+        </tbody></table></div>
+      {% endif %}
+      {% if painel.liquidacoes %}
+        <h3>Liquidações realizadas</h3>
+        <div class="invoice-table-wrap"><table><thead><tr><th>Data</th><th>Conta</th><th>Origem</th><th>Evidências</th><th class="money">Valor</th></tr></thead><tbody>
+          {% for liquidacao in painel.liquidacoes %}
+            <tr>
+              <td>{{ liquidacao.data|date:"d/m/Y" }}</td>
+              <td>{% if liquidacao.movimento_conta %}{{ liquidacao.movimento_conta.conta.nome }}{% else %}—{% endif %}</td>
+              <td>{{ liquidacao.get_origem_display }}</td>
+              <td>{% for evidencia in liquidacao.evidencias.all %}{{ evidencia.get_tipo_display }}{% if not forloop.last %}, {% endif %}{% empty %}Sem evidência vinculada{% endfor %}</td>
+              <td class="money {{ liquidacao.valor|classe_valor:'saida' }}">{{ liquidacao.valor|brl }}</td>
+            </tr>
+          {% endfor %}
+        </tbody></table></div>
+      {% endif %}
+      {% if painel.transportes_entrada %}
+        <h3>Saldo transportado recebido</h3>
+        <ul class="closing-history">{% for transporte in painel.transportes_entrada %}<li><span class="{{ transporte.valor|classe_valor:'saida' }}">{{ transporte.valor|brl }}</span> da <a class="link-button" href="?cycle={{ transporte.fatura_origem.ciclo }}&amp;card={{ transporte.fatura_origem.cartao_id }}&amp;invoice={{ transporte.fatura_origem_id }}">fatura {{ transporte.fatura_origem.ciclo }}</a> · {{ transporte.get_status_display }}</li>{% endfor %}</ul>
+      {% endif %}
+      <h3>Histórico</h3>
+      <ul class="closing-history">
+        {% for evento in painel.historico %}<li><strong>{{ evento.criado_em|date:"d/m/Y H:i" }}</strong> · {{ evento.descricao }}{% if evento.valor %} · <span class="{{ evento.valor|classe_valor:'saida' }}">{{ evento.valor|brl }}</span>{% endif %}</li>{% empty %}<li>Nenhum evento registrado ainda.</li>{% endfor %}
+      </ul>
+    {% else %}
+      <p class="small">Selecione uma fatura acima para conferir sua composição, fechar, programar ou conciliar pagamentos.</p>
+    {% endif %}
+  </section>
+
+  <footer class="invoice-footer">Conta corrente: movimentos de entrada e saída. Cartão: composição por fatura. O pagamento da fatura aparece no caixa e não é contado novamente como despesa.</footer>
+</div>
+<script>
+  (() => {
+    const filterForm = document.getElementById('invoiceFilters');
+    ['cycleFilter', 'accountFilter', 'cardFilter'].forEach((id) => {
+      document.getElementById(id)?.addEventListener('change', () => filterForm.requestSubmit());
+    });
+  })();
+</script>
+{% endblock %}

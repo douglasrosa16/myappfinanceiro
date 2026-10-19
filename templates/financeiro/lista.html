@@ -1,25 +1,94 @@
 {% extends "financeiro/base.html" %}
-{% block title %}{{ titulo }} | myfinanceiro{% endblock %}
+{% load financeiro_format %}
+{% block title %}{{ titulo }} | My App Financeiro{% endblock %}
 {% block content %}
 <header class="top">
   <div><div class="eyebrow">Cadastro</div><h1>{{ titulo }}</h1></div>
-  <a class="button" href="{% url novo_url %}">Novo</a>
+  <a class="button" href="{% url novo_url %}" data-modal-url="{% url novo_url %}" data-modal-title="Novo cadastro">
+    {% if tipo_cadastro == "conta" %}Nova conta{% elif tipo_cadastro == "cartao" %}Novo cartão{% elif tipo_cadastro == "categoria" %}Nova categoria{% elif tipo_cadastro == "pessoa" %}Nova pessoa{% else %}Novo cadastro{% endif %}
+  </a>
 </header>
-<section class="panel">
+<!-- <div class="notice">Prévia com dados importados e CRUDs demonstráveis. Crie, edite e exclua lançamentos e cadastros nesta sessão.</div>  -->
+<section class="panel full registry-panel">
+  <!--<div class="row section-head">
+    <h2>{{ titulo }}</h2>
+  </div> -->
+  <form class="filters" method="get">
+    <input name="q" aria-label="Buscar cadastro" placeholder="Buscar cadastro" value="{{ busca }}">
+    <select name="status" aria-label="Situação do cadastro" onchange="this.form.submit()">
+      <option value="all"{% if status_filtro == "all" %} selected{% endif %}>Todos</option>
+      <option value="active"{% if status_filtro == "active" %} selected{% endif %}>Ativos</option>
+      <option value="inactive"{% if status_filtro == "inactive" %} selected{% endif %}>Inativos</option>
+    </select>
+  </form>
   <table>
-    <thead><tr><th>Nome</th><th>Detalhe</th><th>Situacao</th><th></th></tr></thead>
+    <thead>
+      {% if tipo_cadastro == "conta" %}
+        <tr><th>Conta</th><th>Banco / tipo</th><th>Saldo inicial</th><th>Situação</th><th>Ações</th></tr>
+      {% elif tipo_cadastro == "cartao" %}
+        <tr><th>Cartão</th><th>Conta de pagamento</th><th>Fechamento / vencimento</th><th>Situação</th><th>Ações</th></tr>
+      {% elif tipo_cadastro == "categoria" %}
+        <tr><th>Categoria</th><th>Tipo</th><th>Categoria superior</th><th>Natureza</th><th>Essencialidade</th><th>Resultado</th><th>Situação</th><th>Ações</th></tr>
+      {% else %}
+        <tr><th>Pessoa</th><th>Documento</th><th>Observação</th><th>Situação</th><th>Ações</th></tr>
+      {% endif %}
+    </thead>
     <tbody>
       {% for objeto in objetos %}
       <tr>
-        <td>{{ objeto.nome }}</td>
-        <td class="muted">{{ objeto }}</td>
-        <td>{% if objeto.ativa or objeto.ativo %}<span class="pill">Ativo</span>{% else %}<span class="pill">Inativo</span>{% endif %}</td>
-        <td class="money"><a href="{{ objeto.pk }}/editar/">Editar</a></td>
+        <td><strong>{{ objeto.nome }}</strong>{% if tipo_cadastro == "conta" %}<div class="source">{{ objeto.numero }}</div>{% elif tipo_cadastro == "cartao" %}<div class="source">{% if objeto.final %}Final {{ objeto.final }}{% else %}Final não informado{% endif %}</div>{% endif %}</td>
+        {% if tipo_cadastro == "conta" %}
+          <td>{{ objeto.banco|default:"-" }}<br>{{ objeto.get_tipo_display }}</td>
+          <td><span class="{{ objeto.saldo_inicial|classe_valor }}">{{ objeto.saldo_inicial|brl }}</span><br><span class="source">{{ objeto.data_saldo_inicial|date:"d/m/Y" }}</span></td>
+          <td>{% if objeto.ativa %}<span class="pill pill-active">Ativo</span>{% else %}<span class="pill pill-inactive">Inativo</span>{% endif %}</td>
+        {% elif tipo_cadastro == "cartao" %}
+          <td>{{ objeto.conta_pagamento_padrao|default:"-" }}</td>
+          <td>{% if objeto.dia_fechamento %}Dia {{ objeto.dia_fechamento }}{% else %}A confirmar{% endif %} / {% if objeto.dia_vencimento %}dia {{ objeto.dia_vencimento }}{% else %}a confirmar{% endif %}</td>
+          <td>{% if objeto.ativo %}<span class="pill pill-active">Ativo</span>{% else %}<span class="pill pill-inactive">Inativo</span>{% endif %}</td>
+        {% elif tipo_cadastro == "categoria" %}
+          <td>{{ objeto.get_tipo_display }}</td>
+          <td>{{ objeto.categoria_pai|default:"-" }}</td>
+          <td><span class="pill">{{ objeto.get_natureza_display }}</span></td>
+          <td><span class="pill">{{ objeto.get_essencialidade_display }}</span></td>
+          <td>{% if objeto.computa_resultado %}<span class="pill pill-active">Computa</span>{% else %}<span class="pill pill-inactive">Não computa</span>{% endif %}</td>
+          <td>{% if objeto.ativa %}<span class="pill pill-active">Ativo</span>{% else %}<span class="pill pill-inactive">Inativo</span>{% endif %}</td>
+        {% else %}
+          <td>{{ objeto.documento|default:"-" }}</td>
+          <td>{{ objeto.observacao|default:"-"|truncatechars:60 }}</td>
+          <td>{% if objeto.ativa %}<span class="pill pill-active">Ativo</span>{% else %}<span class="pill pill-inactive">Inativo</span>{% endif %}</td>
+        {% endif %}
+        <td>
+          <div class="row-actions">
+            {% if tipo_cadastro == "conta" %}
+              <form method="post" action="{% url 'conta_reprocessar_saldo' objeto.pk %}">
+                {% csrf_token %}
+                <button class="icon-button" type="submit" title="Reprocessar saldo" aria-label="Reprocessar saldo">↻</button>
+              </form>
+            {% endif %}
+            <a class="icon-button icon-edit" href="{{ objeto.pk }}/editar/" data-modal-url="{{ objeto.pk }}/editar/" data-modal-title="Editar cadastro" title="Editar" aria-label="Editar">
+              <svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+            </a>
+            <form method="post" action="{% url 'cadastro_alternar' tipo_cadastro objeto.pk %}">
+              {% csrf_token %}
+              <button class="icon-button {% if tipo_cadastro == 'cartao' %}{% if objeto.ativo %}icon-disable{% else %}icon-enable{% endif %}{% else %}{% if objeto.ativa %}icon-disable{% else %}icon-enable{% endif %}{% endif %}" type="submit" title="{% if tipo_cadastro == 'cartao' %}{% if objeto.ativo %}Inativar{% else %}Ativar{% endif %}{% else %}{% if objeto.ativa %}Inativar{% else %}Ativar{% endif %}{% endif %}" aria-label="{% if tipo_cadastro == 'cartao' %}{% if objeto.ativo %}Inativar{% else %}Ativar{% endif %}{% else %}{% if objeto.ativa %}Inativar{% else %}Ativar{% endif %}{% endif %}">
+                {% if tipo_cadastro == "cartao" %}
+                  {% if objeto.ativo %}<svg viewBox="0 0 24 24"><path d="M17 17 7 7"/><path d="M7 17 17 7"/><circle cx="12" cy="12" r="9"/></svg>{% else %}<svg viewBox="0 0 24 24"><path d="m5 12 5 5L20 7"/></svg>{% endif %}
+                {% else %}
+                  {% if objeto.ativa %}<svg viewBox="0 0 24 24"><path d="M17 17 7 7"/><path d="M7 17 17 7"/><circle cx="12" cy="12" r="9"/></svg>{% else %}<svg viewBox="0 0 24 24"><path d="m5 12 5 5L20 7"/></svg>{% endif %}
+                {% endif %}
+              </button>
+            </form>
+            <button class="icon-button icon-delete" type="button" data-action="{% url 'cadastro_excluir' tipo_cadastro objeto.pk %}" data-confirm-delete="Excluir {{ objeto.nome }}?" title="Excluir" aria-label="Excluir">
+              <svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+            </button>
+          </div>
+        </td>
       </tr>
       {% empty %}
-      <tr><td colspan="4" class="muted">Nenhum registro encontrado.</td></tr>
+      <tr><td colspan="{% if tipo_cadastro == 'categoria' %}8{% else %}5{% endif %}" class="muted">Nenhum cadastro encontrado.</td></tr>
       {% endfor %}
     </tbody>
   </table>
+  <p class="small">Cadastros vinculados a lançamentos ou a outros cadastros não podem ser excluídos. Use Inativar para preservar o histórico.</p>
 </section>
 {% endblock %}

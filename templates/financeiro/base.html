@@ -3,41 +3,532 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}myfinanceiro{% endblock %}</title>
+  <title>{% block title %}My App Financeiro{% endblock %}</title>
+  {% include "pwa/head.html" %}
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23172e50'/%3E%3Cpath d='M7 23V15h4v8m3 0V9h4v14m3 0V5h4v18' stroke='%2341d7b0' stroke-width='3'/%3E%3C/svg%3E">
   <style>
-    :root{--ink:#172e50;--muted:#65748a;--line:#dce3ec;--green:#007c64;--blue:#2769d8;--bg:#f3f6fa}
+    :root{--ink:#172e50;--muted:#65748a;--line:#dce3ec;--green:#007c64;--blue:#2769d8;--bg:#f3f6fa;--danger:#a62f42}
     *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,sans-serif}
-    a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}input,select,textarea{border:1px solid var(--line);border-radius:7px;padding:9px 12px;width:100%}
-    aside{position:fixed;inset:0 auto 0 0;width:230px;background:#102747;color:white;padding:28px 20px;display:flex;flex-direction:column}
-    .brand{font-size:23px;font-weight:750}.brand span{color:#41d7b0}.muted{color:var(--muted)}aside p{color:#b6c6dc;font-size:14px}
-    nav{display:grid;gap:6px;margin-top:28px}nav a{color:#c5d4e7;padding:10px 12px;border-radius:8px}nav a:hover{background:#264263;color:white}
-    main{margin-left:230px;padding:32px 38px;max-width:1500px}.top{display:flex;justify-content:space-between;gap:20px;align-items:center;margin-bottom:22px}
+    a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}button,select{cursor:pointer}input,select,textarea{border:1px solid var(--line);border-radius:7px;background:white;padding:9px 12px;color:var(--ink);width:100%}button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,a:focus-visible{outline:3px solid #60a5fa;outline-offset:3px}
+    aside{position:fixed;inset:0 auto 0 0;width:230px;background:#102747;color:white;padding:28px 20px;display:flex;flex-direction:column;overflow-y:auto}
+    .brand{font-size:23px;font-weight:750;letter-spacing:-.7px;white-space:nowrap}.brand span{color:#41d7b0}.muted{color:var(--muted)}aside p{color:#b6c6dc;font-size:14px}
+    .nav-scroll-shell{display:contents}.nav-scroll-control{display:none}nav{display:grid;gap:4px;margin-top:20px}nav a,.nav-group-summary,.nav-logout button{display:flex;align-items:center;gap:10px;color:#c5d4e7;padding:9px 12px;border-radius:8px}nav svg,.nav-logout svg{width:18px;height:18px;flex:0 0 18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.nav-group{min-width:0}.nav-group-summary{cursor:pointer;list-style:none}.nav-group-summary::-webkit-details-marker{display:none}.nav-group-summary::marker{display:none}.nav-group-chevron{margin-left:auto;transition:transform .18s ease}.nav-group[open] .nav-group-chevron{transform:rotate(180deg)}.nav-submenu{display:grid;gap:3px;padding:4px 0 2px 18px}.nav-submenu a{font-size:14px;padding:8px 10px}.nav-submenu a svg{width:16px;height:16px;flex-basis:16px}.aside-foot{font-size:14px;color:#b6c6dc;border-top:1px solid #36506f;padding-top:12px;margin-top:24px}.nav-logout{margin-top:auto;border-top:1px solid #36506f;padding-top:12px}.nav-logout button{width:100%;border:0;background:transparent;text-align:left}.nav-logout button:hover,nav a:hover,nav a.active,.nav-group-summary:hover,.nav-group.active>.nav-group-summary{background:#264263;color:white;box-shadow:inset 3px 0 #41d7b0}
+    .pwa-install-button{display:flex;align-items:center;gap:10px;width:100%;border:0;border-radius:8px;background:transparent;color:#c5d4e7;padding:9px 12px;text-align:left}.pwa-install-button[hidden]{display:none}.pwa-install-button:hover{background:#264263;color:white}.pwa-install-button svg{width:18px;height:18px;flex:0 0 18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+    main{margin-left:230px;padding:32px 38px;width:calc(100% - 230px);max-width:1600px}.top{display:flex;justify-content:space-between;gap:20px;align-items:center;margin-bottom:22px}
     h1{font-size:30px;margin:2px 0;letter-spacing:-.3px}h2{font-size:20px;margin:0 0 16px}.eyebrow{font-size:14px;color:var(--muted)}
-    .button{display:inline-flex;align-items:center;border:0;background:var(--ink);color:white;padding:10px 16px;border-radius:7px}.secondary{background:white;color:var(--ink);border:1px solid var(--line)}
-    .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:18px}.card,.panel{background:white;border:1px solid var(--line);border-radius:8px;padding:22px}
+    .button{display:inline-flex;align-items:center;border:0;background:var(--ink);color:white;padding:10px 16px;border-radius:7px}.secondary{background:white;color:var(--ink);border:1px solid var(--line);padding:9px 14px;border-radius:7px}button:disabled{cursor:wait;opacity:.7}
+    .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:18px}.card,.panel{background:white;border:1px solid var(--line);border-radius:12px;padding:22px}.panel.full{width:100%}
     .value{font-size:28px;font-weight:750;margin:8px 0}.grid{display:grid;grid-template-columns:1.2fr 1fr;gap:22px}.full{margin-top:22px}
     table{border-collapse:collapse;width:100%;font-size:14px}td,th{padding:12px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}th{color:var(--muted);font-weight:600}.money{text-align:right;white-space:nowrap}
-    .form{display:grid;grid-template-columns:1fr 1fr;gap:16px}.form p{margin:0}.form .wide{grid-column:1/-1}.actions{display:flex;gap:12px;margin-top:20px}.notice{font-size:14px;padding:12px 16px;background:#e8eef8;border-left:3px solid var(--blue);border-radius:3px;margin-bottom:20px}
-    .errorlist{color:#a62f42;margin:0 0 6px;padding-left:18px}.pill{font-size:13px;border-radius:30px;padding:4px 9px;background:#edf2fa;color:var(--blue)}
-    @media(max-width:900px){aside{position:static;width:100%;padding:18px}nav{display:flex;overflow:auto;margin-top:14px}main{margin:0;padding:20px 14px}.kpis,.grid,.form{grid-template-columns:1fr}.top{align-items:start;flex-direction:column}}
+    .section-head{margin:0 0 20px;flex-wrap:wrap}.section-head h2{margin:0}.filters{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:18px}.filters input{flex:1;min-width:180px}.filters select{max-width:160px}.registry-panel{overflow-x:auto}.form,.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:17px}.form p,.form-grid p{margin:0}.field{display:grid;gap:6px;font-size:14px;min-width:0}.field[hidden]{display:none}.field-help{color:var(--muted);font-size:12px;line-height:1.35}.categoria-form .field-computa_resultado,.categoria-form .field-ativa{align-content:start}.categoria-form .field-computa_resultado input,.categoria-form .field-ativa input{width:auto;min-height:20px}.wide{grid-column:1/-1}.actions,.dialog-actions{display:flex;justify-content:flex-end;gap:12px;margin-top:24px}.notice{font-size:14px;padding:12px 16px;background:#e8eef8;border-left:3px solid var(--blue);border-radius:3px;margin-bottom:20px}
+    .collapsible-panel{padding:0}.collapsible-summary{display:flex;align-items:center;gap:12px;padding:22px;cursor:pointer;list-style:none;border-radius:12px}.collapsible-summary::-webkit-details-marker{display:none}.collapsible-summary:focus-visible{outline:3px solid #60a5fa;outline-offset:3px}.collapsible-summary h2{margin:0}.collapsible-summary-meta{color:var(--muted);font-size:14px;font-weight:600;margin-left:8px}.collapsible-toggle{display:inline-grid;place-items:center;width:30px;height:30px;margin-left:auto;border-radius:7px;color:var(--blue);flex:0 0 auto}.collapsible-summary:hover .collapsible-toggle{background:#edf2fa}.collapsible-toggle svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;transition:transform .18s ease}.collapsible-panel[open] .collapsible-toggle svg{transform:rotate(180deg)}.collapsible-content{padding:0 22px 22px}
+    .selection-toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:11px 14px;margin-bottom:12px;background:#f7f9fc;border:1px solid var(--line);border-radius:8px}.selection-toolbar input,.item-select input{width:auto}.import-items{display:grid;gap:12px}.import-item{border:1px solid var(--line);border-radius:9px;background:white;padding:15px;transition:border-color .15s,box-shadow .15s}.import-item.is-selected{border-color:#60a5fa;box-shadow:0 0 0 2px #60a5fa22}.import-item-head{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:start;margin-bottom:13px}.item-badges{display:flex;gap:6px;align-items:center;justify-content:flex-end;flex-wrap:wrap}.item-select{padding-top:2px}.item-title{font-weight:700}.item-editor-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:9px;align-items:end}.item-field-date,.item-field-value,.item-field-nature,.item-field-scope,.item-field-action{grid-column:span 2}.item-field-category,.item-field-person,.item-field-description{grid-column:span 3}.item-field-note{grid-column:span 4}.item-save{grid-column:span 1;display:flex;align-items:end}.item-save button{width:100%;min-width:84px}.selection-count{font-weight:700;color:var(--blue)}
+    .errorlist{color:var(--danger);margin:0 0 6px;padding-left:18px}.pill{font-size:13px;border-radius:30px;padding:4px 9px;background:#f0f3f7;color:#59677a}.pill-review,.pill-active{background:#e6f6f0;color:#007c64}.pill-completed{background:#edf2fa;color:var(--blue)}.pill-undone,.pill-inactive{background:#fff0f2;color:#a62f42}.row{display:flex;justify-content:space-between;align-items:center;gap:15px}.row-actions{display:flex;gap:8px;align-items:center;min-width:112px}.link-button{color:var(--blue);background:none;border:0;padding:4px 0;font-size:14px;text-align:left}.icon-button{display:inline-grid;place-items:center;width:30px;height:30px;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--blue);padding:0}.icon-button:hover{background:#edf2fa;border-color:var(--line)}.icon-button svg{width:17px;height:17px;stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}.icon-open{color:#2769d8}.icon-edit{color:#2769d8}.icon-disable{color:#dc3545}.icon-enable{color:#00846b}.icon-delete{color:#6b7280}.icon-delete:hover{color:#4b5563}.danger{color:var(--danger)}.source{font-size:13px;color:var(--muted)}.small{font-size:14px;color:var(--muted)}.amount-positive{color:var(--green)}.amount-negative{color:var(--danger)}
+    .toast-stack{position:fixed;top:18px;right:24px;z-index:1000;display:grid;gap:10px;width:min(360px,calc(100vw - 48px))}.toast{border:1px solid var(--line);border-left:4px solid #00846b;background:white;box-shadow:0 14px 40px #10274722;border-radius:8px;padding:12px 40px 12px 14px;font-size:14px;position:relative;animation:toast-in .18s ease-out}.toast.error{border-left-color:var(--danger)}.toast-close{position:absolute;right:8px;top:7px;border:0;background:transparent;color:var(--muted);font-size:20px;line-height:1;width:26px;height:26px;padding:0}.toast.is-hiding{opacity:0;transform:translateY(-6px);transition:opacity .2s ease,transform .2s ease}@keyframes toast-in{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+    dialog{border:1px solid var(--line);border-radius:14px;padding:25px;max-width:740px;width:calc(100% - 32px);max-height:90vh;overflow:auto;color:var(--ink);box-shadow:0 20px 70px #0003}dialog::backdrop{background:#102747aa}.dialog-head{margin-bottom:22px}.dialog-head h2{margin:0}.dialog-head button{background:none;border:0;font-size:25px;padding:0 4px}.modal-loading-state,.modal-error-state{min-height:180px;display:flex;align-items:center;justify-content:center;gap:12px;text-align:center}.modal-loading-state{color:var(--muted);font-weight:650}.modal-error-state{flex-direction:column}.modal-error-state p{margin:0;color:var(--muted)}.modal-error-state .dialog-actions{margin-top:8px}.lancamento-form input,.lancamento-form select{min-height:42px}.lancamento-form.is-payment .field-cartao{grid-column:2}.person-autocomplete,.temporal-control{display:block;position:relative}.temporal-control>input:first-child{padding-right:42px}.temporal-control>button{position:absolute;right:1px;top:1px;width:40px;height:40px;display:grid;place-items:center;border:0;border-radius:0 7px 7px 0;background:white;color:var(--ink);padding:0}.temporal-control>button svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.temporal-native{position:absolute!important;right:8px;bottom:4px;width:1px!important;height:1px!important;min-height:0!important;opacity:0;pointer-events:none}.person-suggestions{position:absolute;z-index:10;top:calc(100% + 4px);left:0;right:0;max-height:190px;overflow-y:auto;padding:4px;background:white;border:1px solid var(--line);border-radius:7px;box-shadow:0 12px 30px #10274722}.person-suggestions[hidden]{display:none}.person-suggestions button{display:block;width:100%;border:0;border-radius:5px;background:white;color:var(--ink);padding:8px 10px;text-align:left}.person-suggestions button:hover,.person-suggestions button.is-active{background:#edf3fb}.form-note{color:var(--muted);font-size:14px;padding:12px;background:#edf3fb;border-radius:7px}.form-error{color:var(--danger);font-size:14px}.loading-overlay{position:fixed;inset:0;z-index:2000;display:grid;place-items:center;background:#10274766;backdrop-filter:blur(2px)}.loading-overlay[hidden]{display:none}.loading-box{display:flex;align-items:center;gap:12px;background:white;border-radius:10px;padding:16px 20px;box-shadow:0 16px 50px #10274744;font-weight:650}.loading-spinner{width:22px;height:22px;border:3px solid #dce3ec;border-top-color:var(--blue);border-radius:50%;animation:loading-spin .7s linear infinite}@keyframes loading-spin{to{transform:rotate(360deg)}}
+    @media(max-width:1100px){main{padding:24px}.kpis{grid-template-columns:repeat(2,1fr)}.grid{grid-template-columns:1fr}.item-editor-grid{grid-template-columns:repeat(6,minmax(0,1fr))}.item-field-date,.item-field-value,.item-field-nature,.item-field-scope,.item-field-action{grid-column:span 2}.item-field-category,.item-field-person,.item-field-description,.item-field-note{grid-column:span 3}.item-save{grid-column:span 2}}
+    @media(max-width:1024px){aside{position:relative;width:100%;padding:16px}.brand{font-size:22px}aside p,.aside-foot{display:none}.nav-scroll-shell{position:relative;display:block;margin-top:14px}nav{display:flex;align-items:flex-start;overflow:auto;margin-top:0;gap:4px;scrollbar-width:none}nav::-webkit-scrollbar{display:none}nav>a,.nav-group,.pwa-install-button{flex:0 0 auto}nav a,.nav-group-summary,.pwa-install-button{white-space:nowrap;padding:8px 10px}.nav-submenu{padding-left:10px}.nav-scroll-control{position:absolute;z-index:2;top:0;width:40px;height:42px;border:0;color:white;padding:0;place-items:center}.nav-scroll-control:not([hidden]){display:grid}.nav-scroll-control svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}.nav-scroll-left{left:0;background:linear-gradient(90deg,#102747 72%,#10274700)}.nav-scroll-right{right:0;background:linear-gradient(270deg,#102747 72%,#10274700)}.nav-logout{position:absolute;top:12px;right:10px;width:auto;margin:0;padding:0;border:0}.nav-logout button{width:auto;padding:8px}.nav-logout button span{display:none}main{margin:0;padding:20px 14px;width:100%}}
+    @media(max-width:700px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.grid,.form,.form-grid{grid-template-columns:1fr}.top{align-items:start;flex-direction:column}.form .wide,.form-grid .wide,.lancamento-form.is-payment .field-cartao{grid-column:auto}.item-editor-grid{grid-template-columns:1fr 1fr}.item-editor-grid>*{grid-column:span 1}.item-field-description,.item-field-note,.item-save{grid-column:1/-1}.import-item-head{grid-template-columns:auto minmax(0,1fr)}}
+    .icon-clone{color:#00846b}
   </style>
 </head>
 <body>
   <aside>
-    <div class="brand">my<span>financeiro</span></div>
-    <p>Financas pessoais e profissionais</p>
-    <nav aria-label="Navegacao principal">
-      <a href="{% url 'dashboard' %}">Visao geral</a>
-      <a href="{% url 'eventos' %}">Lancamentos</a>
-      <a href="{% url 'contas' %}">Contas financeiras</a>
-      <a href="{% url 'cartoes' %}">Cartoes</a>
-      <a href="{% url 'categorias' %}">Categorias</a>
-      <a href="{% url 'pessoas' %}">Pessoas</a>
-      <a href="{% url 'importar_ofx' %}">Importar OFX</a>
-    </nav>
+    <div class="brand">my<span>AppFinanceiro</span></div>
+    <p>{{ request.user.get_full_name|default:request.user.username }}</p>
+    <div class="nav-scroll-shell">
+      <button class="nav-scroll-control nav-scroll-left" type="button" aria-label="Ver opções anteriores do menu" data-nav-scroll="left" hidden><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"></path></svg></button>
+      <nav aria-label="Navegação principal">
+      <a href="{% url 'dashboard' %}"{% if request.resolver_match.url_name == 'dashboard' %} class="active" aria-current="page"{% endif %}><svg aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect></svg><span>Visão geral</span></a>
+      <a href="{% url 'eventos' %}"{% if request.resolver_match.url_name == 'eventos' or request.resolver_match.url_name == 'evento_novo' and request.GET.return_to == 'eventos' or request.resolver_match.url_name == 'evento_editar' or request.resolver_match.url_name == 'parcela_cartao_editar' and request.GET.return_to == 'eventos' or request.resolver_match.url_name == 'parcela_lancamento_excluir' %} class="active" aria-current="page"{% endif %}><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"></path><circle cx="18" cy="17" r="2"></circle></svg><span>Lançamentos</span></a>
+      <a href="{% url 'cartoes_faturas' %}"{% if request.resolver_match.url_name == 'cartoes_faturas' or request.resolver_match.url_name == 'compra_cartao_nova' or request.resolver_match.url_name == 'parcela_cartao_editar' and request.GET.return_to != 'eventos' %} class="active" aria-current="page"{% endif %}><svg aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M3 10h18M7 15h3"></path></svg><span>Cartões e faturas</span></a>
+      <a href="{% url 'parcelas' %}"{% if request.resolver_match.url_name == 'parcelas' %} class="active" aria-current="page"{% endif %}><svg aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"></rect><path d="M8 3v4M16 3v4M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"></path></svg><span>Parcelas futuras</span></a>
+      <a href="{% url 'importar_ofx' %}"{% if request.resolver_match.url_name == 'importar_ofx' or request.resolver_match.url_name == 'importacao_revisao' or request.resolver_match.url_name == 'importacao_resultado' %} class="active" aria-current="page"{% endif %}><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M4 20h16"></path></svg><span>Importação</span></a>
+      <details class="nav-group{% if request.resolver_match.url_name == 'contas' or request.resolver_match.url_name == 'conta_nova' or request.resolver_match.url_name == 'conta_editar' or request.resolver_match.url_name == 'cartoes' or request.resolver_match.url_name == 'cartao_novo' or request.resolver_match.url_name == 'cartao_editar' or request.resolver_match.url_name == 'categorias' or request.resolver_match.url_name == 'categoria_nova' or request.resolver_match.url_name == 'categoria_editar' or request.resolver_match.url_name == 'pessoas' or request.resolver_match.url_name == 'pessoa_nova' or request.resolver_match.url_name == 'pessoa_editar' %} active{% endif %}"{% if request.resolver_match.url_name == 'contas' or request.resolver_match.url_name == 'conta_nova' or request.resolver_match.url_name == 'conta_editar' or request.resolver_match.url_name == 'cartoes' or request.resolver_match.url_name == 'cartao_novo' or request.resolver_match.url_name == 'cartao_editar' or request.resolver_match.url_name == 'categorias' or request.resolver_match.url_name == 'categoria_nova' or request.resolver_match.url_name == 'categoria_editar' or request.resolver_match.url_name == 'pessoas' or request.resolver_match.url_name == 'pessoa_nova' or request.resolver_match.url_name == 'pessoa_editar' %} open{% endif %}>
+        <summary class="nav-group-summary"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7h16M6 7V4h12v3M5 7l1 13h12l1-13M9 11v5M15 11v5"></path></svg><span>Cadastros</span><svg class="nav-group-chevron" aria-hidden="true" viewBox="0 0 24 24"><path d="m7 10 5 5 5-5"></path></svg></summary>
+        <div class="nav-submenu">
+          <a href="{% url 'cartoes' %}"{% if request.resolver_match.url_name == 'cartoes' or request.resolver_match.url_name == 'cartao_novo' or request.resolver_match.url_name == 'cartao_editar' %} class="active" aria-current="page"{% endif %}><svg aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M3 10h18M7 15h4"></path></svg><span>Cartões de crédito</span></a>
+          <a href="{% url 'contas' %}"{% if request.resolver_match.url_name == 'contas' or request.resolver_match.url_name == 'conta_nova' or request.resolver_match.url_name == 'conta_editar' %} class="active" aria-current="page"{% endif %}><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 9h18M5 9v9M9 9v9M15 9v9M19 9v9M3 18h18M12 3 3 7h18z"></path></svg><span>Contas financeiras</span></a>
+          <a href="{% url 'categorias' %}"{% if request.resolver_match.url_name == 'categorias' or request.resolver_match.url_name == 'categoria_nova' or request.resolver_match.url_name == 'categoria_editar' %} class="active" aria-current="page"{% endif %}><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"></path></svg><span>Categorias</span></a>
+          <a href="{% url 'pessoas' %}"{% if request.resolver_match.url_name == 'pessoas' or request.resolver_match.url_name == 'pessoa_nova' or request.resolver_match.url_name == 'pessoa_editar' %} class="active" aria-current="page"{% endif %}><svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0 1 16 0"></path></svg><span>Pessoas</span></a>
+        </div>
+      </details>
+      <button class="pwa-install-button" type="button" data-pwa-install hidden><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M5 20h14"></path></svg><span>Instalar aplicativo</span></button>
+      </nav>
+      <button class="nav-scroll-control nav-scroll-right" type="button" aria-label="Ver mais opções do menu" data-nav-scroll="right" hidden><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"></path></svg></button>
+    </div>
+    <!-- <div class="aside-foot">Sicoob • conta da empresa<br>Um cartão identificado<br><br>Agosto a outubro de 2026</div> -->
+    <form method="post" action="{% url 'logout' %}" class="nav-logout">
+      {% csrf_token %}
+      <button type="submit"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M10 5H5v14h5M14 8l4 4-4 4M8 12h10"></path></svg><span>Sair</span></button>
+    </form>
   </aside>
   <main>
+    <div id="toastStack" class="toast-stack" aria-live="polite" aria-atomic="true">
+      {% if messages %}
+        {% for message in messages %}
+          <div class="toast {% if message.tags %}{{ message.tags }}{% endif %}" role="status">
+            {{ message }}
+            <button class="toast-close" type="button" aria-label="Fechar notificação">&times;</button>
+          </div>
+        {% endfor %}
+      {% endif %}
+    </div>
     {% block content %}{% endblock %}
   </main>
+  <dialog id="editor" aria-labelledby="editorTitle">
+    <div class="row dialog-head">
+      <h2 id="editorTitle">Formulario</h2>
+      <button type="button" aria-label="Fechar formulario" data-close-dialog>&times;</button>
+    </div>
+    <div id="editorBody"></div>
+  </dialog>
+  <dialog id="confirmation" aria-labelledby="confirmationTitle">
+    <h2 id="confirmationTitle">Excluir registro</h2>
+    <p id="confirmationText"></p>
+    <form id="confirmationForm" method="post">
+      {% csrf_token %}
+      <label id="confirmationFutureOption" hidden><input id="confirmationFutureInput" type="checkbox" name="excluir_futuros" value="1"> <span id="confirmationFutureText"></span></label>
+      <div class="dialog-actions">
+        <button class="secondary" type="button" data-close-confirmation>Cancelar</button>
+        <button class="button" type="submit">Excluir</button>
+      </div>
+    </form>
+  </dialog>
+  <div id="loadingOverlay" class="loading-overlay" role="status" aria-live="polite" hidden>
+    <div class="loading-box"><span class="loading-spinner" aria-hidden="true"></span><span id="loadingMessage">Carregando...</span></div>
+  </div>
+  <script>
+    const editor = document.getElementById('editor');
+    const editorTitle = document.getElementById('editorTitle');
+    const editorBody = document.getElementById('editorBody');
+    const toastStack = document.getElementById('toastStack');
+    const confirmation = document.getElementById('confirmation');
+    const confirmationText = document.getElementById('confirmationText');
+    const confirmationForm = document.getElementById('confirmationForm');
+    const confirmationFutureOption = document.getElementById('confirmationFutureOption');
+    const confirmationFutureInput = document.getElementById('confirmationFutureInput');
+    const confirmationFutureText = document.getElementById('confirmationFutureText');
+    const loadingOverlay = document.getElementById('loadingOverlay');
+    const loadingMessage = document.getElementById('loadingMessage');
+    let modalRequestSequence = 0;
+    let modalRequestController = null;
+    let currentModalUrl = '';
+    let currentModalTitle = 'Formulário';
+    const primaryNav = document.querySelector('nav[aria-label="Navegação principal"]');
+    const navGroup = primaryNav?.querySelector('.nav-group');
+    const navScrollButtons = document.querySelectorAll('[data-nav-scroll]');
+    const horizontalNavQuery = window.matchMedia('(max-width: 1024px)');
+
+    function updateNavScrollControls() {
+      if (!primaryNav) return;
+      const hasOverflow = primaryNav.scrollWidth > primaryNav.clientWidth + 1;
+      const atStart = primaryNav.scrollLeft <= 1;
+      const atEnd = primaryNav.scrollLeft + primaryNav.clientWidth >= primaryNav.scrollWidth - 1;
+      navScrollButtons.forEach((button) => {
+        const pointsLeft = button.dataset.navScroll === 'left';
+        button.hidden = !horizontalNavQuery.matches || !hasOverflow || (pointsLeft ? atStart : atEnd);
+      });
+    }
+
+    function syncNavMode() {
+      if (navGroup) {
+        if (horizontalNavQuery.matches) navGroup.open = false;
+        else if (navGroup.classList.contains('active')) navGroup.open = true;
+      }
+      window.requestAnimationFrame(updateNavScrollControls);
+    }
+
+    function showPageLoading(message = 'Processando, aguarde...') {
+      if (!loadingOverlay) return;
+      loadingMessage.textContent = message;
+      loadingOverlay.hidden = false;
+    }
+
+    function startFormLoading(form) {
+      const button = form.querySelector('button[type="submit"]');
+      if (button) {
+        button.dataset.originalLabel = button.textContent;
+        button.textContent = form.dataset.loadingLabel || button.dataset.loadingLabel || 'Carregando...';
+        button.disabled = true;
+      }
+      showPageLoading(form.dataset.loadingMessage || 'Processando, aguarde...');
+    }
+
+    function stopFormLoading(form) {
+      const button = form.querySelector('button[type="submit"]');
+      if (button?.dataset.originalLabel) {
+        button.textContent = button.dataset.originalLabel;
+        delete button.dataset.originalLabel;
+      }
+      if (button) button.disabled = false;
+      if (loadingOverlay) loadingOverlay.hidden = true;
+    }
+
+    function announce(message, tone = '') {
+      if (!toastStack) return;
+      const toast = document.createElement('div');
+      toast.className = `toast ${tone}`.trim();
+      toast.setAttribute('role', 'status');
+      toast.innerHTML = `${message}<button class="toast-close" type="button" aria-label="Fechar notificação">&times;</button>`;
+      toastStack.appendChild(toast);
+      scheduleToast(toast);
+    }
+
+    function closeToast(toast) {
+      if (!toast) return;
+      toast.classList.add('is-hiding');
+      window.setTimeout(() => toast.remove(), 220);
+    }
+
+    function scheduleToast(toast) {
+      window.setTimeout(() => closeToast(toast), 4200);
+    }
+
+    function bindLancamentoFields(form) {
+      if (!form?.matches('[data-lancamento-form]')) return;
+      const origem = form.querySelector('[name="origem"]');
+      const natureza = form.querySelector('[name="natureza"]');
+      const situacao = form.querySelector('[name="situacao"]');
+      const groups = Object.fromEntries(['conta', 'cartao', 'ciclo', 'modo_lancamento', 'quantidade_parcelas', 'quantidade_repeticoes', 'intervalo_meses', 'vencimento'].map((name) => [name, form.querySelector(`.field-${name}`)]));
+      Object.values(groups).forEach((group) => {
+        const control = group?.querySelector('input,select,textarea');
+        if (control) control.dataset.serverDisabled = control.disabled ? 'true' : 'false';
+      });
+      const configure = (name, {visible = true, enabled = true, required = false} = {}) => {
+        const group = groups[name];
+        if (!group) return;
+        group.hidden = !visible;
+        const control = group.querySelector('input,select,textarea');
+        if (!control) return;
+        control.disabled = control.dataset.serverDisabled === 'true' || !visible || !enabled;
+        control.required = required && !control.disabled;
+        group.querySelectorAll('[data-open-temporal-picker],.temporal-native').forEach((picker) => {
+          picker.disabled = control.disabled;
+        });
+      };
+      const update = () => {
+        const isPayment = natureza.value === 'PAGAMENTO_FATURA';
+        if (isPayment && origem.value !== 'CONTA' && origem.dataset.serverDisabled !== 'true') {
+          origem.value = 'CONTA';
+        }
+        const isCard = origem.value === 'CARTAO';
+        const isForecast = situacao?.value === 'PREVISTO';
+        const canInstall = isCard && natureza.value === 'DESPESA' && !isPayment;
+        const modo = groups.modo_lancamento?.querySelector('select')?.value || 'UNICO';
+        const recorrente = modo === 'RECORRENTE';
+        const parcelado = modo === 'PARCELADO';
+        form.classList.toggle('is-payment', isPayment);
+        configure('conta', {visible: !isCard || isPayment, required: !isCard || isPayment});
+        configure('cartao', {visible: isCard || isPayment, required: isCard || isPayment});
+        configure('ciclo', {visible: isCard || isPayment, enabled: isCard || isPayment, required: isCard || isPayment});
+        configure('vencimento', {enabled: !isCard && !isPayment && isForecast, required: !isCard && !isPayment && isForecast});
+        configure('modo_lancamento', {visible: !isPayment, enabled: !isPayment});
+        configure('quantidade_parcelas', {visible: parcelado, enabled: canInstall && parcelado, required: canInstall && parcelado});
+        configure('quantidade_repeticoes', {visible: recorrente, enabled: recorrente, required: recorrente});
+        configure('intervalo_meses', {visible: recorrente, enabled: recorrente, required: recorrente});
+        const quantity = groups.quantidade_parcelas?.querySelector('input');
+        if (quantity && !canInstall && quantity.dataset.serverDisabled !== 'true') quantity.value = '1';
+      };
+      origem.addEventListener('change', update);
+      natureza.addEventListener('change', update);
+      groups.modo_lancamento?.querySelector('select')?.addEventListener('change', update);
+      situacao?.addEventListener('change', update);
+      update();
+    }
+
+    function bindCategoriaFields(form) {
+      if (!form?.matches('[data-categoria-form]') || form.dataset.categoriaBound === 'true') return;
+      form.dataset.categoriaBound = 'true';
+      const tipo = form.querySelector('[data-categoria-tipo]');
+      const essencialidade = form.querySelector('[data-categoria-essencialidade]');
+      const computaResultado = form.querySelector('[data-computa-resultado]');
+      if (!tipo || !essencialidade || !computaResultado) return;
+
+      computaResultado.addEventListener('change', () => {
+        computaResultado.dataset.userChanged = 'true';
+      });
+      const sugerirResultado = (valor) => {
+        if (computaResultado.dataset.userChanged !== 'true') computaResultado.checked = valor;
+      };
+      tipo.addEventListener('change', () => {
+        if (tipo.value !== 'TRANSFERENCIA') return;
+        essencialidade.value = 'NEUTRO';
+        sugerirResultado(false);
+      });
+      essencialidade.addEventListener('change', () => {
+        sugerirResultado(essencialidade.value !== 'NEUTRO');
+      });
+    }
+
+    function bindPessoaAutocomplete(form) {
+      const wrapper = form?.querySelector('[data-person-autocomplete]');
+      if (!wrapper || wrapper.dataset.bound === 'true') return;
+      wrapper.dataset.bound = 'true';
+      const input = wrapper.querySelector('[name="pessoa_nome_livre"]');
+      const hidden = form.querySelector('[name="pessoa"]');
+      const list = wrapper.querySelector('[role="listbox"]');
+      const options = Array.from(wrapper.querySelectorAll('[data-person-option]'));
+      let visibleOptions = [];
+      let activeIndex = -1;
+
+      const normalize = (value) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR');
+      const close = () => {
+        list.hidden = true;
+        input.setAttribute('aria-expanded', 'false');
+        input.removeAttribute('aria-activedescendant');
+        options.forEach((option) => option.classList.remove('is-active'));
+        activeIndex = -1;
+      };
+      const show = () => {
+        const query = normalize(input.value.trim());
+        visibleOptions = options.filter((option) => {
+          const matches = !query || normalize(option.dataset.personName).includes(query);
+          option.hidden = !matches;
+          return matches;
+        });
+        if (!visibleOptions.length) {
+          close();
+          return;
+        }
+        list.hidden = false;
+        input.setAttribute('aria-expanded', 'true');
+      };
+      const activate = (index) => {
+        if (!visibleOptions.length) return;
+        activeIndex = (index + visibleOptions.length) % visibleOptions.length;
+        visibleOptions.forEach((option, optionIndex) => option.classList.toggle('is-active', optionIndex === activeIndex));
+        const active = visibleOptions[activeIndex];
+        input.setAttribute('aria-activedescendant', active.id);
+        active.scrollIntoView({block: 'nearest'});
+      };
+      const select = (option) => {
+        input.value = option.dataset.personName;
+        hidden.value = option.dataset.personId;
+        close();
+        input.focus();
+      };
+
+      input.addEventListener('focus', show);
+      input.addEventListener('input', () => {
+        hidden.value = '';
+        show();
+      });
+      input.addEventListener('keydown', (event) => {
+        if (event.key === 'ArrowDown') {
+          event.preventDefault();
+          if (list.hidden) show();
+          activate(activeIndex + 1);
+        } else if (event.key === 'ArrowUp') {
+          event.preventDefault();
+          if (list.hidden) show();
+          activate(activeIndex - 1);
+        } else if (event.key === 'Enter' && activeIndex >= 0) {
+          event.preventDefault();
+          select(visibleOptions[activeIndex]);
+        } else if (event.key === 'Escape') {
+          close();
+        }
+      });
+      input.addEventListener('blur', () => window.setTimeout(close, 120));
+      options.forEach((option) => {
+        option.addEventListener('mousedown', (event) => event.preventDefault());
+        option.addEventListener('click', () => select(option));
+      });
+    }
+
+    function bindTemporalPickers(form) {
+      form?.querySelectorAll('[data-temporal-control]').forEach((wrapper) => {
+        if (wrapper.dataset.bound === 'true') return;
+        wrapper.dataset.bound = 'true';
+        const kind = wrapper.dataset.temporalControl;
+        const visible = wrapper.querySelector('input:first-child');
+        const native = wrapper.querySelector('.temporal-native');
+        const button = wrapper.querySelector('[data-open-temporal-picker]');
+        const toNative = (value) => {
+          if (kind === 'month') {
+            const match = value.match(/^(0[1-9]|1[0-2])\/(\d{4})$/);
+            return match ? `${match[2]}-${match[1]}` : '';
+          }
+          const match = value.match(/^(0[1-9]|[12]\d|3[01])\/(0[1-9]|1[0-2])\/(\d{4})$/);
+          return match ? `${match[3]}-${match[2]}-${match[1]}` : '';
+        };
+        const toDisplay = (value) => {
+          if (kind === 'month') {
+            const match = value.match(/^(\d{4})-(0[1-9]|1[0-2])$/);
+            return match ? `${match[2]}/${match[1]}` : '';
+          }
+          const match = value.match(/^(\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/);
+          return match ? `${match[3]}/${match[2]}/${match[1]}` : '';
+        };
+        button.addEventListener('click', () => {
+          native.value = toNative(visible.value.trim());
+          if (typeof native.showPicker === 'function') native.showPicker();
+          else native.click();
+        });
+        native.addEventListener('change', () => {
+          visible.value = toDisplay(native.value);
+          visible.dispatchEvent(new Event('change', {bubbles: true}));
+        });
+      });
+    }
+
+    function bindModalForm() {
+      const form = editorBody.querySelector('form');
+      if (!form) return;
+      bindLancamentoFields(form);
+      bindCategoriaFields(form);
+      bindPessoaAutocomplete(form);
+      bindTemporalPickers(form);
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        startFormLoading(form);
+        try {
+          const response = await fetch(form.action || window.location.href, {
+            method: form.method || 'post',
+            body: new FormData(form),
+            headers: {'X-Requested-With': 'XMLHttpRequest'},
+          });
+          const html = await response.text();
+          if (response.redirected || response.url !== form.action) {
+            editor.close();
+            window.location.assign(response.url);
+            return;
+          }
+          const doc = new DOMParser().parseFromString(html, 'text/html');
+          const replacement = doc.querySelector('[data-modal-content]');
+          if (replacement) {
+            editorBody.innerHTML = replacement.innerHTML;
+            bindModalForm();
+          } else {
+            editor.close();
+            window.location.reload();
+          }
+        } finally {
+          stopFormLoading(form);
+        }
+      });
+    }
+
+    function renderModalLoading(title) {
+      editorTitle.textContent = title || 'Formulário';
+      editorBody.setAttribute('aria-busy', 'true');
+      editorBody.innerHTML = '<div class="modal-loading-state" role="status" aria-live="polite"><span class="loading-spinner" aria-hidden="true"></span><span>Carregando formulário...</span></div>';
+      if (!editor.open) editor.showModal();
+    }
+
+    function renderModalError() {
+      editorBody.removeAttribute('aria-busy');
+      editorBody.innerHTML = '<div class="modal-error-state" role="alert"><strong>Não foi possível carregar o formulário.</strong><p>Verifique sua conexão e tente novamente.</p><div class="dialog-actions"><button class="secondary" type="button" data-close-dialog>Fechar</button><button class="button" type="button" data-retry-modal>Tentar novamente</button></div></div>';
+    }
+
+    function cancelModalRequest() {
+      modalRequestSequence += 1;
+      modalRequestController?.abort();
+      modalRequestController = null;
+      editorBody.removeAttribute('aria-busy');
+    }
+
+    async function openModal(url, title) {
+      const requestSequence = ++modalRequestSequence;
+      modalRequestController?.abort();
+      modalRequestController = new AbortController();
+      currentModalUrl = url;
+      currentModalTitle = title || 'Formulário';
+      renderModalLoading(currentModalTitle);
+      try {
+        const response = await fetch(url, {
+          headers: {'X-Requested-With': 'XMLHttpRequest'},
+          signal: modalRequestController.signal,
+        });
+        if (!response.ok) throw new Error(`Falha ao carregar o formulário (${response.status})`);
+        const html = await response.text();
+        if (requestSequence !== modalRequestSequence) return;
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const content = doc.querySelector('[data-modal-content]');
+        editorTitle.textContent = title || doc.querySelector('h1')?.textContent || 'Formulário';
+        editorBody.innerHTML = content ? content.innerHTML : html;
+        editorBody.removeAttribute('aria-busy');
+        bindModalForm();
+      } catch (error) {
+        if (error.name === 'AbortError' || requestSequence !== modalRequestSequence) return;
+        renderModalError();
+      } finally {
+        if (requestSequence === modalRequestSequence) modalRequestController = null;
+      }
+    }
+
+    document.addEventListener('click', (event) => {
+      const navScrollButton = event.target.closest('[data-nav-scroll]');
+      if (navScrollButton && primaryNav) {
+        const direction = navScrollButton.dataset.navScroll === 'left' ? -1 : 1;
+        primaryNav.scrollBy({left: direction * Math.max(primaryNav.clientWidth * 0.7, 180), behavior: 'smooth'});
+        return;
+      }
+      const close = event.target.closest('[data-close-dialog]');
+      if (close) {
+        cancelModalRequest();
+        editor.close();
+        return;
+      }
+      const retryModal = event.target.closest('[data-retry-modal]');
+      if (retryModal) {
+        openModal(currentModalUrl, currentModalTitle);
+        return;
+      }
+      const trigger = event.target.closest('[data-modal-url]');
+      if (trigger && !editor.contains(trigger)) {
+        event.preventDefault();
+        openModal(trigger.dataset.modalUrl || trigger.href, trigger.dataset.modalTitle || trigger.textContent.trim());
+        return;
+      }
+      const deleteTrigger = event.target.closest('[data-confirm-delete]');
+      if (deleteTrigger) {
+        event.preventDefault();
+        confirmationText.textContent = deleteTrigger.dataset.confirmDelete;
+        confirmationForm.action = deleteTrigger.dataset.action;
+        const futuros = Number(deleteTrigger.dataset.recorrenciaFuturos || 0);
+        confirmationFutureInput.checked = false;
+        confirmationFutureOption.hidden = futuros < 1;
+        confirmationFutureText.textContent = `Excluir também ${futuros} lançamento(s) futuro(s) previsto(s) desta recorrência.`;
+        confirmation.showModal();
+      }
+      if (event.target.closest('[data-close-confirmation]')) {
+        confirmation.close();
+      }
+      const toastClose = event.target.closest('.toast-close');
+      if (toastClose) {
+        closeToast(toastClose.closest('.toast'));
+      }
+      const submenuLink = event.target.closest('.nav-submenu a');
+      if (submenuLink && horizontalNavQuery.matches && navGroup) {
+        navGroup.open = false;
+      }
+      const loadingLink = event.target.closest('[data-loading-link], nav a');
+      if (loadingLink && event.button === 0 && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey && loadingLink.target !== '_blank') {
+        showPageLoading(loadingLink.dataset.loadingMessage || 'Carregando...');
+      }
+    });
+    document.addEventListener('submit', (event) => {
+      if (event.defaultPrevented || event.target.matches('[data-no-loading]')) return;
+      startFormLoading(event.target);
+    });
+    document.querySelectorAll('.toast').forEach(scheduleToast);
+    document.querySelectorAll('[data-lancamento-form]').forEach(bindLancamentoFields);
+    document.querySelectorAll('[data-categoria-form]').forEach(bindCategoriaFields);
+    document.querySelectorAll('form').forEach(bindPessoaAutocomplete);
+    document.querySelectorAll('form').forEach(bindTemporalPickers);
+    editor?.addEventListener('cancel', cancelModalRequest);
+    primaryNav?.addEventListener('scroll', updateNavScrollControls, {passive: true});
+    navGroup?.addEventListener('toggle', () => window.requestAnimationFrame(updateNavScrollControls));
+    horizontalNavQuery.addEventListener('change', syncNavMode);
+    window.addEventListener('resize', updateNavScrollControls);
+    syncNavMode();
+    window.addEventListener('pageshow', () => {
+      if (loadingOverlay) loadingOverlay.hidden = true;
+      syncNavMode();
+    });
+  </script>
+  {% include "pwa/register.html" %}
 </body>
 </html>

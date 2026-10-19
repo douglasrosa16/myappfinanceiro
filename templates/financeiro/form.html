@@ -1,22 +1,72 @@
 {% extends "financeiro/base.html" %}
-{% block title %}{{ titulo }} | myfinanceiro{% endblock %}
+{% block title %}{{ titulo }} | My App Financeiro{% endblock %}
 {% block content %}
 <header class="top">
   <div><div class="eyebrow">Formulario</div><h1>{{ titulo }}</h1></div>
 </header>
-<section class="panel">
-  <form method="post" class="form" enctype="multipart/form-data">
+<section class="panel" data-modal-content>
+  <form method="post" class="form-grid{% if formulario_lancamento %} lancamento-form{% endif %}{% if request.resolver_match.url_name == 'categoria_nova' or request.resolver_match.url_name == 'categoria_editar' %} categoria-form{% endif %}" enctype="multipart/form-data" action="{{ request.get_full_path }}"{% if formulario_lancamento %} data-lancamento-form{% endif %}{% if request.resolver_match.url_name == 'categoria_nova' or request.resolver_match.url_name == 'categoria_editar' %} data-categoria-form{% endif %}>
     {% csrf_token %}
     {% for field in form %}
-      <p{% if field.field.widget.input_type == "textarea" %} class="wide"{% endif %}>
-        {{ field.label_tag }}
-        {{ field.errors }}
+      {% if field.is_hidden %}
         {{ field }}
-      </p>
+        {% if field.errors %}<div class="form-error wide">{{ field.errors }}</div>{% endif %}
+      {% else %}
+        <p class="field field-{{ field.name }}{% if field.field.widget.input_type == "textarea" or field.name == "observacao" or request.resolver_match.url_name == 'categoria_nova' and field.name == 'nome' or request.resolver_match.url_name == 'categoria_editar' and field.name == 'nome' %} wide{% endif %}">
+          {{ field.label_tag }}
+          {{ field.errors }}
+          {% if field.name == "pessoa_nome_livre" %}
+            <span class="person-autocomplete" data-person-autocomplete>
+              {{ field }}
+              <span class="person-suggestions" id="{{ field.auto_id }}_suggestions" role="listbox" aria-label="Pessoas cadastradas" hidden>
+                {% for pessoa in form.pessoas_sugestoes %}
+                  <button type="button" role="option" id="{{ field.auto_id }}_option_{{ forloop.counter0 }}" data-person-option data-person-id="{{ pessoa.pk }}" data-person-name="{{ pessoa.nome }}">{{ pessoa.nome }}</button>
+                {% endfor %}
+              </span>
+            </span>
+          {% elif field.name == "data" or field.name == "data_original" or field.name == "vencimento" %}
+            <span class="temporal-control" data-temporal-control="date">
+              {{ field }}
+              <button type="button" data-open-temporal-picker aria-label="Abrir calendário de {{ field.label|lower }}">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3v3M17 3v3M4 9h16M5 5h14a1 1 0 0 1 1 1v14H4V6a1 1 0 0 1 1-1Z"/></svg>
+              </button>
+              <input class="temporal-native" type="date" tabindex="-1" aria-hidden="true">
+            </span>
+          {% elif field.name == "ciclo" %}
+            <span class="temporal-control" data-temporal-control="month">
+              {{ field }}
+              <button type="button" data-open-temporal-picker aria-label="Abrir seletor de {{ field.label|lower }}">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3v3M17 3v3M4 9h16M5 5h14a1 1 0 0 1 1 1v14H4V6a1 1 0 0 1 1-1Z"/></svg>
+              </button>
+              <input class="temporal-native" type="month" tabindex="-1" aria-hidden="true">
+            </span>
+          {% else %}
+            {{ field }}
+          {% endif %}
+          {% if field.help_text %}<span class="field-help">{{ field.help_text }}</span>{% endif %}
+        </p>
+      {% endif %}
     {% endfor %}
+    {% if form.non_field_errors %}
+      <div class="form-error wide">{{ form.non_field_errors }}</div>
+    {% endif %}
+    {% if ciclo_aviso %}
+      <div class="form-note wide">Atenção: {{ ciclo_aviso }}</div>
+    {% endif %}
+    {% if formulario_lancamento %}
+      {% if edicao_lancamento %}
+        <div class="form-note wide">{% if form.aplicar_recorrencia %}Escolha se a alteração deve alcançar os lançamentos futuros ainda previstos. Datas, vencimentos, ciclos e situação de cada ocorrência serão preservados.{% else %}Edita apenas este registro. A data original e o ciclo da fatura são campos diferentes.{% endif %}{% if edicao_protegida %} Os campos financeiros estão bloqueados porque há importação ou liquidação vinculada; use o fluxo correspondente para corrigi-los.{% endif %}</div>
+      {% else %}
+        <div class="form-note wide">Escolha lançamento único, compra parcelada ou recorrência. Em recorrência, cada ocorrência mantém o valor informado; a primeira usa a situação escolhida e as demais são previstas.</div>
+      {% endif %}
+    {% elif request.resolver_match.url_name == "compra_cartao_nova" %}
+      <div class="form-note wide">Informe o valor total da compra. O sistema dividirá em centavos, criará a primeira parcela no ciclo escolhido e projetará as demais como previstas.</div>
+    {% elif request.resolver_match.url_name == "parcela_cartao_editar" %}
+      <div class="form-note wide">A edição afeta somente este item. A compra original, as outras parcelas e o histórico importado permanecem preservados.</div>
+    {% endif %}
     <div class="actions wide">
+      <button class="button secondary" type="button" data-close-dialog>Cancelar</button>
       <button class="button" type="submit">Salvar</button>
-      <a class="button secondary" href="{% url 'dashboard' %}">Cancelar</a>
     </div>
   </form>
 </section>

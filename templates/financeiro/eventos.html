@@ -1,27 +1,100 @@
 {% extends "financeiro/base.html" %}
-{% block title %}Lancamentos | myfinanceiro{% endblock %}
+{% load financeiro_format %}
+{% block title %}Lançamentos | My App Financeiro{% endblock %}
 {% block content %}
-<header class="top">
-  <div><div class="eyebrow">Caixa, faturas e previsoes</div><h1>Lancamentos</h1></div>
-  <a class="button" href="{% url 'evento_novo' %}">Novo lancamento</a>
-</header>
-<section class="panel">
-  <table>
-    <thead><tr><th>Data</th><th>Descricao</th><th>Natureza</th><th>Ambito</th><th>Situacao</th><th class="money">Valor</th></tr></thead>
-    <tbody>
-      {% for evento in eventos %}
-      <tr>
-        <td>{{ evento.data }}</td>
-        <td>{{ evento.descricao }}</td>
-        <td>{{ evento.get_natureza_display }}</td>
-        <td>{{ evento.get_ambito_display }}</td>
-        <td>{{ evento.get_situacao_display }}</td>
-        <td class="money">R$ {{ evento.valor|floatformat:2 }}</td>
-      </tr>
-      {% empty %}
-      <tr><td colspan="6" class="muted">Nenhum lancamento cadastrado.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</section>
+<style>
+  .transactions-page{max-width:1600px}.transactions-page .top{margin-bottom:22px}.transactions-header-actions{display:flex;align-items:end;gap:12px}.transactions-period{display:grid;gap:5px;font-size:14px}.transactions-period select{width:auto;min-width:112px}.transactions-header-actions .button{min-height:42px;align-items:center}
+  .transactions-filters-panel{margin-bottom:16px}.transactions-filters{margin:0}.transactions-filters-grid{display:grid;grid-template-columns:repeat(4,minmax(170px,1fr));gap:12px;align-items:end}.transactions-filters-grid label{display:grid;gap:5px;font-size:14px}.transactions-search{grid-column:span 2}.transactions-filter-note{font-size:14px;color:var(--muted);margin:12px 0 0}.transactions-filter-footer{display:flex;justify-content:flex-end;margin-top:12px}
+  .transactions-filters-grid .transactions-group-card{display:flex;align-items:center;gap:8px;align-self:center}.transactions-group-card input{width:auto}
+  .transactions-totals{display:flex;justify-content:flex-end;gap:12px;margin:0 0 16px}.transactions-total-card{min-width:190px;background:white;border:1px solid var(--line);border-radius:10px;padding:12px 16px}.transactions-total-card span{display:block;color:var(--muted);font-size:13px}.transactions-total-card strong{display:block;margin-top:3px;font-size:21px;letter-spacing:-.3px}
+  .transactions-list-panel{margin-top:0}.transactions-list-panel .collapsible-summary{padding-bottom:18px}.transactions-list-panel .collapsible-content{padding-top:0}
+  .transactions-heading{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:18px}.transactions-heading h2{margin:0}.transactions-count{margin:0 0 8px}.transactions-table-wrap{overflow-x:auto}.transactions-table{min-width:920px}.transactions-table td:first-child,.transactions-table .money{white-space:nowrap}.transactions-table .description{min-width:260px;max-width:460px;overflow-wrap:anywhere}.transactions-table .source-name{min-width:170px}.transactions-table .category-cell{min-width:170px}.transactions-table .pill{display:inline-block;margin-top:5px;background:#edf2fa;color:var(--blue)}.transactions-table .row-actions{gap:12px;min-width:105px}.transactions-table .transaction-main-row.has-observation td{border-bottom:0;padding-bottom:5px}.transactions-table .transaction-observation-row td{padding-top:0}.transactions-table .transaction-observation{color:var(--muted);font-size:14px;white-space:pre-wrap;overflow-wrap:anywhere}.transactions-table .transaction-observation strong{color:var(--ink)}.transactions-table .empty{padding:28px;text-align:center;color:var(--muted)}.transactions-footer{font-size:14px;color:var(--muted);margin-top:28px}
+  .transactions-analysis-context{display:flex;justify-content:space-between;gap:16px;align-items:center;background:#edf3fb;border-left:3px solid var(--blue);border-radius:5px;padding:12px 14px;margin-bottom:16px}.transactions-analysis-context strong{display:block}.transactions-analysis-context .small{margin-top:3px}
+  @media(max-width:1100px){.transactions-filters-grid{grid-template-columns:1fr 1fr}.transactions-search{grid-column:span 2}}
+  @media(max-width:700px){.transactions-header-actions{width:100%;align-items:end}.transactions-period{flex:1}.transactions-period select{width:100%}.transactions-header-actions .button{justify-content:center}.transactions-filters-grid{grid-template-columns:1fr}.transactions-search{grid-column:auto}.transactions-page .panel{padding:16px}.transactions-page .collapsible-panel{padding:0}.transactions-totals{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.transactions-total-card{min-width:0;padding:11px 13px}.transactions-total-card strong{font-size:18px}.transactions-list-panel .collapsible-summary{padding:16px}.transactions-list-panel .collapsible-content{padding:0 16px 16px}}
+</style>
+<div class="transactions-page">
+  <header class="top">
+    <div><div class="eyebrow">Finanças pessoais e profissionais</div><h1>Lançamentos</h1></div>
+    <div class="transactions-header-actions">
+      <label class="transactions-period" for="periodFilter">Período / ciclo<select id="periodFilter" name="period" form="transactionsFilters" aria-label="Período ou ciclo dos lançamentos"><option value=""{% if not periodo_selecionado %} selected{% endif %}>Todos os ciclos</option>{% for periodo in periodos %}<option value="{{ periodo.valor }}"{% if periodo.valor == periodo_selecionado %} selected{% endif %}>{{ periodo.rotulo }}</option>{% endfor %}</select></label>
+      <a class="button" href="{% url 'evento_novo' %}?return_to=eventos&amp;{{ filtros_query }}" data-modal-url="{% url 'evento_novo' %}?return_to=eventos&amp;{{ filtros_query }}" data-modal-title="Novo lançamento">Novo lançamento</a>
+    </div>
+  </header>
+
+  <details class="panel full collapsible-panel transactions-filters-panel" open>
+    <summary class="collapsible-summary" title="Abrir ou fechar os filtros dos lançamentos">
+      <h2>Filtros</h2>
+      <span class="collapsible-toggle" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>
+    </summary>
+    <div class="collapsible-content">
+    <form id="transactionsFilters" class="transactions-filters" method="get" aria-label="Filtros dos lançamentos">
+    {% if analysis_active %}<input type="hidden" name="analysis_type" value="{{ analysis_type }}"><input type="hidden" name="analysis_value" value="{{ analysis_value }}"><input type="hidden" name="analysis_nature" value="{{ analysis_nature }}">{% endif %}
+    <div class="transactions-filters-grid">
+      <label for="dateFromFilter">Data inicial<input id="dateFromFilter" name="date_from" value="{{ data_inicial|date:'d/m/Y' }}" placeholder="DD/MM/AAAA" inputmode="numeric" data-date-filter></label>
+      <label for="dateToFilter">Data final<input id="dateToFilter" name="date_to" value="{{ data_final|date:'d/m/Y' }}" placeholder="DD/MM/AAAA" inputmode="numeric" data-date-filter></label>
+      <label for="accountFilter">Conta financeira<select id="accountFilter" name="account"><option value="all">Todas as contas</option>{% for conta in contas %}<option value="{{ conta.pk }}"{% if conta_selecionada.pk == conta.pk %} selected{% endif %}>{{ conta.nome }}{% if not conta.ativa %} (inativa){% endif %}</option>{% endfor %}</select></label>
+      <label for="cardFilter">Cartão de crédito<select id="cardFilter" name="card"><option value="all">Todos os cartões</option>{% for cartao in cartoes_compativeis %}<option value="{{ cartao.pk }}"{% if cartao_selecionado.pk == cartao.pk %} selected{% endif %}>{{ cartao.nome }}{% if not cartao.ativo %} (inativo){% endif %}</option>{% endfor %}</select></label>
+      <label class="transactions-search" for="transactionSearch">Descrição, pessoa ou documento<input id="transactionSearch" name="q" placeholder="Buscar lançamentos" value="{{ busca }}"></label>
+      <label for="originFilter">Origem<select id="originFilter" name="origin"><option value="all"{% if origem_filtro == "all" %} selected{% endif %}>Todas as origens</option><option value="CARTAO"{% if origem_filtro == "CARTAO" %} selected{% endif %}>Cartão</option><option value="CONTA"{% if origem_filtro == "CONTA" %} selected{% endif %}>Conta corrente</option></select></label>
+      <label for="categoryFilter">Categoria<select id="categoryFilter" name="category"><option value="all">Todas as categorias</option>{% for categoria in categorias %}<option value="{{ categoria.pk }}"{% if categoria_filtro == categoria.pk|stringformat:"s" %} selected{% endif %}>{{ categoria.rotulo_com_pai }}{% if not categoria.ativa %} (inativa){% endif %}</option>{% endfor %}</select></label>
+      <label for="parentCategoryFilter">Categoria superior<select id="parentCategoryFilter" name="parent_category"><option value="all">Todas as categorias superiores</option>{% for categoria in categorias_superiores %}<option value="{{ categoria.pk }}"{% if categoria_superior_filtro == categoria.pk|stringformat:"s" %} selected{% endif %}>{{ categoria.rotulo_com_pai }}{% if not categoria.ativa %} (inativa){% endif %}</option>{% endfor %}</select></label>
+      <label for="natureFilter">Natureza do lançamento<select id="natureFilter" name="nature"><option value="all">Todas as naturezas</option>{% for valor, rotulo in naturezas_lancamento %}<option value="{{ valor }}"{% if natureza_filtro == valor %} selected{% endif %}>{{ rotulo }}</option>{% endfor %}</select></label>
+      <label for="categoryNatureFilter">Natureza da categoria<select id="categoryNatureFilter" name="category_nature"><option value="all">Todas as naturezas</option>{% for valor, rotulo in naturezas_categoria %}<option value="{{ valor }}"{% if natureza_categoria_filtro == valor %} selected{% endif %}>{{ rotulo }}</option>{% endfor %}</select></label>
+      <label for="essentialityFilter">Essencialidade<select id="essentialityFilter" name="essentiality"><option value="all">Todas as essencialidades</option>{% for valor, rotulo in essencialidades %}<option value="{{ valor }}"{% if essencialidade_filtro == valor %} selected{% endif %}>{{ rotulo }}</option>{% endfor %}</select></label>
+      <label for="computesFilter">Resultado<select id="computesFilter" name="computes"><option value="all"{% if computa_resultado_filtro == "all" %} selected{% endif %}>Computa e não computa</option><option value="COMPUTA"{% if computa_resultado_filtro == "COMPUTA" %} selected{% endif %}>Computa</option><option value="NAO_COMPUTA"{% if computa_resultado_filtro == "NAO_COMPUTA" %} selected{% endif %}>Não computa</option></select></label>
+      <label for="personFilter">Pessoa<select id="personFilter" name="person"><option value="all">Todas as pessoas</option>{% for pessoa in pessoas %}<option value="{{ pessoa.pk }}"{% if pessoa_filtro == pessoa.pk|stringformat:"s" %} selected{% endif %}>{{ pessoa.nome }}{% if not pessoa.ativa %} (inativa){% endif %}</option>{% endfor %}</select></label>
+      <label for="statusFilter">Situação<select id="statusFilter" name="status"><option value="all"{% if situacao_filtro == "all" %} selected{% endif %}>Todas as situações</option><option value="REALIZADO"{% if situacao_filtro == "REALIZADO" %} selected{% endif %}>Realizado ou cobrado</option><option value="PREVISTO"{% if situacao_filtro == "PREVISTO" %} selected{% endif %}>Previsto</option></select></label>
+      <label class="transactions-group-card" for="groupCardInvoices"><input id="groupCardInvoices" type="checkbox" name="group_card_invoices" value="1"{% if group_card_invoices %} checked{% endif %} data-card-invoice-grouping> Agrupar lançamentos de cartão por fatura</label>
+    </div>
+    <p class="transactions-filter-note">Conta: filtra movimentos e cartões vinculados. Cartão: filtra lançamentos e pagamentos vinculados. No intervalo, conta usa a data do lançamento e cartão usa o vencimento da parcela.</p>
+    <div class="transactions-filter-footer"><a class="secondary" href="?">Limpar filtros</a></div>
+    </form>
+    </div>
+  </details>
+
+  <section class="transactions-totals" aria-label="Totais dos lançamentos filtrados">
+    <article class="transactions-total-card">
+      <span>Total de créditos</span>
+      <strong class="{{ total_creditos|classe_valor }}">{{ total_creditos|brl }}</strong>
+    </article>
+    <article class="transactions-total-card">
+      <span>Total de débitos</span>
+      <strong class="{{ total_debitos|classe_valor:'saida' }}">{{ total_debitos|brl }}</strong>
+    </article>
+  </section>
+
+  <details class="panel full collapsible-panel transactions-list-panel" aria-labelledby="transactionsListTitle" open>
+    <summary class="collapsible-summary" title="Abrir ou fechar a lista de lançamentos">
+      <h2 id="transactionsListTitle">Lançamentos <span class="collapsible-summary-meta">{{ total_registros }} registro{{ total_registros|pluralize:"s" }}</span></h2>
+      <span class="collapsible-toggle" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>
+    </summary>
+    <div class="collapsible-content">
+    {% if analysis_active %}
+      <div class="transactions-analysis-context" role="status">
+        <div><strong>Exibindo lançamentos que compõem: {{ analysis_label }}</strong><div class="small">Os valores representam somente a parcela atribuída ao indicador.</div></div>
+        <a class="link-button" href="?">Remover detalhamento</a>
+      </div>
+    {% endif %}
+    <p class="small transactions-count">Conta e cartão não são somados como um mesmo gasto.</p>
+    {% include "financeiro/_tabela_lancamentos.html" with mostrar_acoes=True valor_indicador=analysis_active %}
+    <p class="small">No intervalo, conta usa a data do lançamento e cartão usa o vencimento da parcela. Previsto não altera saldo da conta.</p>
+    </div>
+  </details>
+  <footer class="transactions-footer">Conta corrente: movimentos do extrato. Cartão: composição por fatura. Pagamento da fatura aparece no caixa e não é contado novamente como despesa.</footer>
+</div>
+<script>
+  (() => {
+    const filterForm = document.getElementById('transactionsFilters');
+    document.getElementById('periodFilter')?.addEventListener('change', () => filterForm.requestSubmit());
+    filterForm?.querySelectorAll('select:not(#periodFilter), [data-date-filter], [data-card-invoice-grouping]').forEach((field) => field.addEventListener('change', () => filterForm.requestSubmit()));
+    filterForm?.querySelectorAll('[data-date-filter]').forEach((field) => field.addEventListener('input', () => {
+      const digits = field.value.replace(/\D/g, '').slice(0, 8);
+      field.value = [digits.slice(0, 2), digits.slice(2, 4), digits.slice(4, 8)].filter(Boolean).join('/');
+    }));
+    const search = document.getElementById('transactionSearch');
+    let timer;
+    search?.addEventListener('input', () => { window.clearTimeout(timer); timer = window.setTimeout(() => filterForm.requestSubmit(), 350); });
+  })();
+</script>
 {% endblock %}

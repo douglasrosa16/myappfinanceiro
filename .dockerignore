@@ -1,0 +1,14 @@
+.git
+.gitignore
+.env
+.venv
+__pycache__
+*.py[cod]
+*.sqlite3
+media/importacoes
+staticfiles
+_arquivos
+Dockerfile
+docker-compose*.yml
+README*.md
+diagnostico-e-projeto-financeiro.md

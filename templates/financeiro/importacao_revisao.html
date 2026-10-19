@@ -1,27 +1,543 @@
 {% extends "financeiro/base.html" %}
-{% block title %}Revisao OFX | myfinanceiro{% endblock %}
+{% load financeiro_format %}
+{% block title %}{% if importacao.adaptador == 'cartao_planilha' %}Revisão de planilha{% else %}Revisão OFX{% endif %} | My App Financeiro{% endblock %}
 {% block content %}
+<style>
+  .link-picker{grid-column:1/-1;border:1px solid var(--border);border-radius:12px;padding:12px;background:var(--surface-soft,#f8fafc)}
+  .link-picker[hidden]{display:none}
+  .link-picker-search{display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:end}
+  .link-target{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:10px;padding:10px;border-radius:10px;background:var(--surface,#fff)}
+  .link-results{display:grid;gap:8px;margin-top:10px}
+  .link-results h4{margin:8px 0 2px}
+  .link-candidate{width:100%;text-align:left;border:1px solid var(--border);border-radius:10px;padding:10px;background:var(--surface,#fff);color:inherit}
+  .link-candidate:hover{border-color:var(--primary)}
+  .link-candidate.is-selected{border-color:var(--primary);box-shadow:inset 0 0 0 1px var(--primary)}
+  .link-candidate-meta{display:flex;flex-wrap:wrap;gap:6px 12px;margin-top:5px;font-size:.84rem;color:var(--muted)}
+  .batch-confirmation-list{display:grid;gap:10px;margin:18px 0;padding:0}
+  .batch-confirmation-item{display:grid;grid-template-columns:minmax(120px,.7fr) minmax(0,1.3fr);gap:12px;padding:10px 0;border-bottom:1px solid var(--line)}
+  .batch-confirmation-item dt{font-weight:700}.batch-confirmation-item dd{margin:0;overflow-wrap:anywhere}
+  .item-select-unavailable{cursor:not-allowed;opacity:.5}
+  @media(max-width:720px){.link-picker-search{grid-template-columns:1fr}.link-target{align-items:flex-start;flex-direction:column}}
+</style>
 <header class="top">
-  <div><div class="eyebrow">Lote em revisao</div><h1>{{ importacao.nome_arquivo }}</h1></div>
-  <span class="pill">{{ importacao.get_status_display }}</span>
+  <div>
+    <div class="eyebrow">Lote #{{ importacao.pk }} em revisão</div>
+    <h1>{{ importacao.nome_arquivo }}</h1>
+    <div class="small">{{ importacao.get_origem_display }} · {{ importacao.conta|default:importacao.cartao }}{% if importacao.ciclo %} · ciclo {{ importacao.ciclo }}{% endif %}</div>
+  </div>
+  <span class="pill pill-review">{% if importacao.adaptador == 'cartao_planilha' %}Planilha em revisão{% else %}{{ importacao.get_status_display }}{% endif %}</span>
 </header>
-<section class="panel">
-  <h2>Itens identificados</h2>
-  <table>
-    <thead><tr><th>Data</th><th>Identificador</th><th>Descricao</th><th>Status</th><th class="money">Valor</th></tr></thead>
-    <tbody>
-      {% for item in itens %}
-      <tr>
-        <td>{{ item.data|default:"-" }}</td>
-        <td>{{ item.identificador_externo|default:"-" }}</td>
-        <td>{{ item.descricao_original }}</td>
-        <td>{{ item.get_status_display }}</td>
-        <td class="money">R$ {{ item.valor|floatformat:2 }}</td>
-      </tr>
-      {% empty %}
-      <tr><td colspan="5" class="muted">Nenhum item encontrado no OFX.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+
+<div class="kpis">
+  <div class="card"><div class="muted">Novos</div><div class="value" data-import-count="NOVO">{{ resumo.contagens.NOVO }}</div></div>
+  <div class="card"><div class="muted">Conciliados</div><div class="value" data-import-count="CONCILIADO">{{ resumo.contagens.CONCILIADO }}</div></div>
+  <div class="card"><div class="muted">Divergentes</div><div class="value" data-import-count="DIVERGENTE">{{ resumo.contagens.DIVERGENTE }}</div></div>
+  <div class="card"><div class="muted">Pendentes</div><div class="value" data-import-count="PENDENTE">{{ resumo.contagens.PENDENTE }}</div></div>
+</div>
+
+<section class="panel full">
+  <div class="row section-head"><h2>Conferência do arquivo</h2><strong>{{ resumo.quantidade }} itens · <span class="{{ resumo.total|classe_valor }}">{{ resumo.total|brl }}</span></strong></div>
+  <div class="grid">
+    <div><div class="small">Instituição</div><strong>{{ importacao.instituicao|default:"Não informada" }}</strong><br><div class="small">Período</div><strong>{{ importacao.data_inicio|date:"d/m/Y"|default:"-" }} a {{ importacao.data_fim|date:"d/m/Y"|default:"-" }}</strong></div>
+    <div><div class="small">Débitos / créditos / líquido</div><strong><span class="{{ importacao.total_debitos|classe_valor:'saida' }}">{{ importacao.total_debitos|brl }}</span> / <span class="{{ importacao.total_creditos|classe_valor }}">{{ importacao.total_creditos|brl }}</span> / <span class="{{ importacao.total_liquido|classe_valor }}">{{ importacao.total_liquido|brl }}</span></strong><br><div class="small">Saldo informado</div><strong class="{{ importacao.saldo_informado|classe_valor }}">{{ importacao.saldo_informado|brl }}</strong></div>
+  </div>
 </section>
+
+<section class="panel full">
+  <h2>Classificação em lote</h2>
+  <form method="post" action="{% url 'importacao_aplicar_lote' importacao.pk %}" class="form-grid" id="batchForm" data-batch-form>
+    {% csrf_token %}
+    {% for field in form_lote %}<p class="field">{{ field.label_tag }}{{ field }}</p>{% endfor %}
+    <div class="actions wide"><button class="secondary" type="submit">Aplicar classificação</button></div>
+  </form>
+  <p class="small">A classificação em massa altera somente itens ainda não revisados. Antes da aplicação, você poderá conferir os campos e valores informados.</p>
+</section>
+
+<details class="panel full collapsible-panel import-review-items">
+  <summary class="collapsible-summary" title="Abrir ou fechar a lista de itens da importação">
+    <h2>Itens da importação <span class="collapsible-summary-meta">{{ resumo.quantidade }} itens · <span class="{{ resumo.total|classe_valor }}">{{ resumo.total|brl }}</span></span></h2>
+    <span class="collapsible-toggle" aria-hidden="true">
+      <svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
+    </span>
+  </summary>
+  <div class="collapsible-content">
+    <form method="get" class="filters">
+      <input name="q" value="{{ busca }}" placeholder="Buscar descrição ou identificador">
+      <select name="status">
+        <option value="">Todos os status</option>
+        <option value="NOVO" {% if status_filtro == 'NOVO' %}selected{% endif %}>Novos</option>
+        <option value="CONCILIADO" {% if status_filtro == 'CONCILIADO' %}selected{% endif %}>Conciliados</option>
+        <option value="DIVERGENTE" {% if status_filtro == 'DIVERGENTE' %}selected{% endif %}>Divergentes</option>
+        <option value="PENDENTE" {% if status_filtro == 'PENDENTE' %}selected{% endif %}>Pendentes</option>
+        <option value="PLANEJADO" {% if status_filtro == 'PLANEJADO' %}selected{% endif %}>Planejados</option>
+      </select>
+      <select name="revisao" aria-label="Situação da revisão">
+        <option value="">Todos quanto à revisão</option>
+        <option value="NAO_REVISADOS" {% if revisao_filtro == 'NAO_REVISADOS' %}selected{% endif %}>Não revisados</option>
+        <option value="REVISADOS" {% if revisao_filtro == 'REVISADOS' %}selected{% endif %}>Revisados</option>
+      </select>
+      <button class="secondary" type="submit">Filtrar</button>
+    </form>
+
+    <div class="selection-toolbar">
+      <label><input type="checkbox" data-select-all> Selecionar todos os itens não revisados visíveis</label>
+      <span class="selection-count" data-selection-count>0 selecionados</span>
+      <button class="link-button" type="button" data-clear-selection>Limpar seleção</button>
+    </div>
+
+    <div class="import-items">
+      {% for item in itens %}
+      <article class="import-item" data-item-row="{{ item.pk }}">
+        <div class="import-item-head">
+          <label class="item-select{% if item.revisado_em %} item-select-unavailable{% endif %}" title="{% if item.revisado_em %}Itens revisados só podem ser alterados individualmente{% else %}Selecionar item{% endif %}"><input type="checkbox" name="itens_selecionados" value="{{ item.pk }}" form="batchForm" data-item-select aria-label="Selecionar {{ item.descricao_original }}"{% if item.revisado_em %} disabled{% endif %}></label>
+          <div>
+            <div class="item-title">{{ item.descricao_original }}</div>
+            <div class="small">{{ item.data|date:"d/m/Y"|default:"Sem data" }} · <span class="{{ item.valor|classe_valor }}">{{ item.valor|brl }}</span> · {{ item.identificador_externo|default:"Sem FITID" }}{% if item.numero_parcela %} · Parcela {{ item.numero_parcela }}/{{ item.total_parcelas }}{% endif %}</div>
+            <div class="small" data-item-reason>{{ item.motivo_status|default:"Novo registro identificado." }}</div>
+            <div class="small" data-item-cycle-warning{% if not item.aviso_ciclo %} hidden{% endif %}>{{ item.aviso_ciclo }}</div>
+          </div>
+          <div class="item-badges"><span class="pill" data-item-status>{{ item.get_status_display }}</span><span class="pill {% if item.revisado_em %}pill-review{% endif %}" data-item-reviewed>{% if item.revisado_em %}Revisado{% else %}Não revisado{% endif %}</span></div>
+        </div>
+
+        <form method="post" class="item-editor-grid" data-item-form data-candidate-url="{% url 'importacao_candidatos_vinculo' importacao.pk item.pk %}" data-item-value="{{ item.valor_final }}" data-link-locked="{% if item.status == 'CONCILIADO' and item.evento_id and not item.vinculo_manual_pendente %}true{% else %}false{% endif %}">
+          {% csrf_token %}<input type="hidden" name="item_id" value="{{ item.pk }}">
+          <input type="hidden" name="titulo_alvo_id" value="{{ item.titulo_alvo_id|default_if_none:'' }}" data-title-target>
+          <input type="hidden" name="titulos_alvo_ids" value="{% for vinculo in item.titulos_multiplos_lista %}{{ vinculo.titulo_id }}{% if not forloop.last %},{% endif %}{% endfor %}" data-titles-target>
+          <input type="hidden" name="movimento_alvo_id" value="{{ item.movimento_conta_id|default_if_none:'' }}" data-movement-target>
+          <input type="hidden" name="parcela_alvo_id" value="{{ item.parcela_id|default_if_none:'' }}" data-installment-target>
+          <label class="field item-field-date">Data revisada<input type="date" name="data_revisada" value="{{ item.data_revisada|date:'Y-m-d' }}"></label>
+          <label class="field item-field-value">Valor revisado<input name="valor_revisado" inputmode="decimal" value="{{ item.valor_revisado|default_if_none:'' }}"></label>
+          <label class="field item-field-nature">Natureza<select name="natureza">{% for value,label in naturezas %}<option value="{{ value }}" {% if item.natureza == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+          <label class="field item-field-category">Categoria<select name="categoria"><option value="">A classificar</option>{% for categoria in categorias %}<option value="{{ categoria.pk }}" {% if item.categoria_id == categoria.pk %}selected{% endif %}>{{ categoria.rotulo_com_pai }}</option>{% endfor %}</select></label>
+          <label class="field item-field-person">Pessoa<select name="pessoa"><option value="">Não definida</option>{% for pessoa in pessoas %}<option value="{{ pessoa.pk }}" {% if item.pessoa_id == pessoa.pk %}selected{% endif %}>{{ pessoa.nome }}</option>{% endfor %}</select></label>
+          <label class="field item-field-scope">Âmbito<select name="ambito">{% for value,label in ambitos %}<option value="{{ value }}" {% if item.ambito == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+          <label class="field item-field-action">Ação<select name="acao">{% for value,label in acoes %}<option value="{{ value }}" {% if item.acao == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+          <label class="field item-field-description">Descrição revisada<input name="descricao_revisada" value="{{ item.descricao_revisada }}" placeholder="Manter descrição original"></label>
+          <label class="field item-field-note">Observação<input name="observacao" value="{{ item.observacao }}" placeholder="Observação do lançamento"></label>
+          <section class="link-picker" data-link-picker {% if item.acao != 'VINCULAR' %}hidden{% endif %}>
+            <div class="link-target" data-link-target {% if not item.titulo_alvo_id and not item.titulos_multiplos_lista and not item.movimento_conta_id and not item.parcela_id and not item.evento_id %}hidden{% endif %}>
+              <div>
+                <strong data-link-target-title>
+                  {% if item.titulo_alvo_id %}Título: {{ item.titulo_alvo.descricao }}
+                  {% elif item.titulos_multiplos_lista %}{{ item.titulos_multiplos_lista|length }} títulos selecionados
+                  {% elif item.movimento_conta_id %}Movimento: {{ item.movimento_conta.evento.descricao }}
+                  {% elif item.parcela_id %}Evento: {{ item.parcela.descricao_exibicao }} · parcela {{ item.parcela.numero }}/{{ item.parcela.total }}
+                  {% elif item.evento_id %}Evento: {{ item.evento.descricao }}{% endif %}
+                </strong>
+                <div class="small" data-link-target-detail>
+                  {% if item.titulo_alvo_id %}Saldo <span class="{{ item.titulo_alvo.saldo_aberto|classe_valor:item.titulo_alvo.tipo }}">{{ item.titulo_alvo.saldo_aberto|brl }}</span> · vencimento {{ item.titulo_alvo.vencimento|date:'d/m/Y' }}
+                  {% elif item.titulos_multiplos_lista %}Total selecionado <span class="{{ item.valor_final|classe_valor }}">{{ item.valor_final|brl }}</span> · valor do OFX {{ item.valor_final|brl }} · diferença R$ 0,00
+                  {% elif item.movimento_conta_id %}<span class="{{ item.movimento_conta.valor|classe_valor }}">{{ item.movimento_conta.valor|brl }}</span> · {{ item.movimento_conta.data_efetiva|date:'d/m/Y' }}{% endif %}
+                  {% if item.parcela_id %}<span class="{% if item.parcela.natureza_exibicao == 'DESPESA' %}{{ item.parcela.valor|classe_valor:'saida' }}{% else %}{{ item.parcela.valor|classe_valor }}{% endif %}">{{ item.parcela.valor|brl }}</span> · fatura {{ item.parcela.fatura.ciclo }} · {{ item.parcela.fatura.cartao.nome }}{% endif %}
+                </div>
+              </div>
+              {% if item.status != 'CONCILIADO' or not item.evento_id or item.vinculo_manual_pendente %}<button type="button" class="link-button danger" data-clear-link>Remover vínculo</button>{% endif %}
+            </div>
+            {% if item.status != 'CONCILIADO' or not item.evento_id or item.vinculo_manual_pendente %}
+            <div class="link-picker-search">
+              <label class="field">{% if importacao.origem == 'CARTAO' %}Buscar evento ou parcela prevista{% else %}Buscar título ou movimento{% endif %}<input type="search" data-link-query placeholder="Descrição, pessoa, categoria ou documento"></label>
+              <button type="button" class="secondary" data-search-links>Buscar semelhantes</button>
+              <button type="button" class="link-button" data-search-all>Buscar em todos</button>
+            </div>
+            <div class="small" data-link-feedback>Escolha um destino para confirmar o vínculo.</div>
+            <div class="link-results" data-link-results></div>
+            <button type="button" class="link-button" data-link-more hidden>Carregar mais candidatos</button>
+            {% else %}
+            <div class="small">Vínculo já conciliado; o destino está bloqueado para preservar a rastreabilidade.</div>
+            {% endif %}
+          </section>
+          <div class="item-save"><button class="secondary" type="submit">Salvar</button></div>
+        </form>
+      </article>
+      {% empty %}
+        <div class="muted" data-empty-items>Nenhum item corresponde aos filtros.</div>
+      {% endfor %}
+    </div>
+  </div>
+</details>
+
+<div class="actions">
+  <a class="secondary" href="{% url 'importar_ofx' %}">Voltar</a>
+  <button class="secondary danger" type="button" data-confirm-delete="Excluir este lote em revisão? O arquivo e todos os itens ainda não confirmados serão removidos." data-action="{% url 'importacao_excluir' importacao.pk %}">Excluir lote</button>
+  <form method="post" action="{% url 'importacao_confirmar' importacao.pk %}" data-loading-label="Confirmando..." data-loading-message="Confirmando a importação e criando os lançamentos...">{% csrf_token %}<button class="button" type="submit">Confirmar importação</button></form>
+</div>
+
+<dialog id="batchConfirmation" aria-labelledby="batchConfirmationTitle">
+  <h2 id="batchConfirmationTitle">Confirmar classificação em massa</h2>
+  <p>Confira as alterações que serão aplicadas somente aos itens ainda não revisados:</p>
+  <dl class="batch-confirmation-list" data-batch-confirmation-list></dl>
+  <p class="small" data-batch-confirmation-impact></p>
+  <div class="dialog-actions">
+    <button class="secondary" type="button" data-cancel-batch>Cancelar</button>
+    <button class="button" type="button" data-confirm-batch>Confirmar e aplicar</button>
+  </div>
+</dialog>
+
+<script>
+const itemCheckboxes = [...document.querySelectorAll('[data-item-select]')];
+const selectAll = document.querySelector('[data-select-all]');
+const selectionCount = document.querySelector('[data-selection-count]');
+const batchForm = document.querySelector('[data-batch-form]');
+const batchConfirmation = document.getElementById('batchConfirmation');
+const batchConfirmationList = batchConfirmation?.querySelector('[data-batch-confirmation-list]');
+const batchConfirmationImpact = batchConfirmation?.querySelector('[data-batch-confirmation-impact]');
+const reviewFilter = '{{ revisao_filtro|escapejs }}';
+
+function selectableCheckboxes() {
+  return itemCheckboxes.filter((checkbox) => !checkbox.disabled);
+}
+
+function updateSelection() {
+  const selectable = selectableCheckboxes();
+  const selected = selectable.filter((checkbox) => checkbox.checked);
+  selectionCount.textContent = `${selected.length} selecionado${selected.length === 1 ? '' : 's'}`;
+  itemCheckboxes.forEach((checkbox) => checkbox.closest('[data-item-row]').classList.toggle('is-selected', checkbox.checked));
+  if (selectAll) {
+    selectAll.disabled = selectable.length === 0;
+    selectAll.checked = selectable.length > 0 && selected.length === selectable.length;
+    selectAll.indeterminate = selected.length > 0 && selected.length < selectable.length;
+  }
+}
+
+itemCheckboxes.forEach((checkbox) => checkbox.addEventListener('change', updateSelection));
+selectAll?.addEventListener('change', () => {
+  selectableCheckboxes().forEach((checkbox) => { checkbox.checked = selectAll.checked; });
+  updateSelection();
+});
+document.querySelector('[data-clear-selection]')?.addEventListener('click', () => {
+  selectableCheckboxes().forEach((checkbox) => { checkbox.checked = false; });
+  updateSelection();
+});
+
+function updateCounters(contagens) {
+  Object.entries(contagens).forEach(([status, total]) => {
+    const counter = document.querySelector(`[data-import-count="${status}"]`);
+    if (counter) counter.textContent = total;
+  });
+}
+
+function markItemReviewed(row) {
+  const badge = row.querySelector('[data-item-reviewed]');
+  badge.textContent = 'Revisado';
+  badge.classList.add('pill-review');
+  const checkbox = row.querySelector('[data-item-select]');
+  if (checkbox) {
+    checkbox.checked = false;
+    checkbox.disabled = true;
+    checkbox.closest('.item-select')?.classList.add('item-select-unavailable');
+    checkbox.closest('.item-select')?.setAttribute('title', 'Itens revisados só podem ser alterados individualmente');
+  }
+  updateSelection();
+}
+
+function removeReviewedFromCurrentFilter(row) {
+  if (reviewFilter !== 'NAO_REVISADOS') return;
+  const checkbox = row.querySelector('[data-item-select]');
+  const index = itemCheckboxes.indexOf(checkbox);
+  if (index >= 0) itemCheckboxes.splice(index, 1);
+  row.remove();
+  updateSelection();
+  if (!document.querySelector('[data-item-row]')) {
+    const empty = document.createElement('div');
+    empty.className = 'muted';
+    empty.dataset.emptyItems = '';
+    empty.textContent = 'Nenhum item corresponde aos filtros.';
+    document.querySelector('.import-items').appendChild(empty);
+  }
+}
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>'"]/g, (character) => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[character]));
+}
+
+function moneyFromApi(value) {
+  if (value === null || value === undefined || value === '') return '';
+  return new Intl.NumberFormat('pt-BR', {style: 'currency', currency: 'BRL'}).format(Number(value));
+}
+
+function setupLinkPicker(form) {
+  const action = form.elements.acao;
+  const picker = form.querySelector('[data-link-picker]');
+  if (!picker || !action) return;
+  const titleInput = form.querySelector('[data-title-target]');
+  const titlesInput = form.querySelector('[data-titles-target]');
+  const movementInput = form.querySelector('[data-movement-target]');
+  const installmentInput = form.querySelector('[data-installment-target]');
+  const target = form.querySelector('[data-link-target]');
+  const targetTitle = form.querySelector('[data-link-target-title]');
+  const targetDetail = form.querySelector('[data-link-target-detail]');
+  const results = form.querySelector('[data-link-results]');
+  const moreButton = form.querySelector('[data-link-more]');
+  const feedback = form.querySelector('[data-link-feedback]');
+  const query = form.querySelector('[data-link-query]');
+  const saveButton = form.querySelector('button[type="submit"]');
+  let loaded = false;
+  let currentCandidates = [];
+  let currentScope = 'SUGESTOES';
+  let currentPage = 1;
+  const selectedTitles = new Map(
+    (titlesInput?.value || '').split(',').filter(Boolean).map((id) => [String(id), null])
+  );
+
+  function valorDoItem() {
+    return Math.abs(Number(form.dataset.itemValue || 0));
+  }
+
+  function limparSelecaoMultipla() {
+    selectedTitles.clear();
+    if (titlesInput) titlesInput.value = '';
+    if (saveButton) saveButton.disabled = false;
+  }
+
+  function atualizarSelecaoTitulos() {
+    if (!titlesInput) return;
+    if ([...selectedTitles.values()].some((titulo) => !titulo)) return;
+    const titulos = [...selectedTitles.values()].filter(Boolean);
+    const total = titulos.reduce((soma, titulo) => soma + Number(titulo.saldo ?? titulo.valor ?? 0), 0);
+    const diferenca = valorDoItem() - total;
+    titlesInput.value = [...selectedTitles.keys()].join(',');
+    titleInput.value = '';
+    movementInput.value = '';
+    installmentInput.value = '';
+    if (!selectedTitles.size) {
+      target.hidden = true;
+      if (saveButton) saveButton.disabled = false;
+      return;
+    }
+    targetTitle.textContent = `${selectedTitles.size} título${selectedTitles.size === 1 ? '' : 's'} selecionado${selectedTitles.size === 1 ? '' : 's'}`;
+    targetDetail.textContent = `Selecionado ${moneyFromApi(total)} de ${moneyFromApi(valorDoItem())} · diferença ${moneyFromApi(diferenca)}`;
+    target.hidden = false;
+    if (feedback) feedback.textContent = diferenca === 0
+      ? 'A soma está exata. Salve o item para registrar os vínculos.'
+      : `Selecione títulos até totalizar exatamente ${moneyFromApi(valorDoItem())}.`;
+    if (saveButton) saveButton.disabled = diferenca !== 0;
+  }
+
+  function selectCandidate(candidate) {
+    if (candidate.tipo === 'TITULO') {
+      const id = String(candidate.id);
+      if (selectedTitles.has(id)) selectedTitles.delete(id);
+      else selectedTitles.set(id, candidate);
+      atualizarSelecaoTitulos();
+      renderCandidates(currentCandidates);
+      return;
+    }
+    limparSelecaoMultipla();
+    titleInput.value = candidate.tipo === 'TITULO' ? candidate.id : '';
+    movementInput.value = candidate.tipo === 'MOVIMENTO' ? candidate.id : '';
+    installmentInput.value = candidate.tipo === 'PARCELA' ? candidate.id : '';
+    const candidateLabels = {TITULO: 'Título', MOVIMENTO: 'Movimento', PARCELA: 'Evento previsto'};
+    targetTitle.textContent = `${candidateLabels[candidate.tipo]}: ${candidate.descricao}`;
+    targetDetail.textContent = `${moneyFromApi(candidate.saldo ?? candidate.valor)} · ${candidate.data.split('-').reverse().join('/')} · ${candidate.conta}`;
+    target.hidden = false;
+    if (feedback) feedback.textContent = 'Destino selecionado. Salve o item para registrar o vínculo.';
+  }
+
+  function renderCandidates(candidates) {
+    if (!results) return;
+    if (!candidates.length) {
+      results.innerHTML = '<div class="muted">Nenhum candidato elegível encontrado. Use “Buscar em todos” ou ajuste a revisão do item.</div>';
+      return;
+    }
+    const groups = {TITULO: [], MOVIMENTO: [], PARCELA: []};
+    candidates.forEach((candidate) => {
+      groups[candidate.tipo].push(candidate);
+      if (candidate.tipo === 'TITULO' && selectedTitles.has(String(candidate.id))) selectedTitles.set(String(candidate.id), candidate);
+    });
+    results.innerHTML = Object.entries(groups).filter(([, items]) => items.length).map(([type, items]) => `
+      <div><h4>${type === 'TITULO' ? 'Títulos previstos' : type === 'MOVIMENTO' ? 'Movimentos realizados' : 'Eventos e parcelas previstos'}</h4>
+      ${items.map((candidate) => `
+        <button type="button" class="link-candidate${candidate.tipo === 'TITULO' && selectedTitles.has(String(candidate.id)) ? ' is-selected' : ''}" aria-pressed="${candidate.tipo === 'TITULO' && selectedTitles.has(String(candidate.id)) ? 'true' : 'false'}" data-candidate-type="${candidate.tipo}" data-candidate-id="${candidate.id}">
+          <strong>${escapeHtml(candidate.descricao)}</strong>
+          <div class="link-candidate-meta">
+            <span>${escapeHtml(candidate.data.split('-').reverse().join('/'))}</span>
+            <span>${escapeHtml(moneyFromApi(candidate.saldo ?? candidate.valor))}</span>
+            <span>${escapeHtml(candidate.conta)}</span>
+            <span>${escapeHtml(candidate.natureza)}</span>
+            <span>${escapeHtml(candidate.categoria)}</span>
+            <span>${escapeHtml(candidate.pessoa)}</span>
+          </div>
+          ${candidate.tipo === 'TITULO' && selectedTitles.has(String(candidate.id)) ? '<div class="small">Selecionado para a conciliação múltipla.</div>' : ''}
+          ${candidate.motivos.length ? `<div class="small">Compatível: ${escapeHtml(candidate.motivos.join(', '))}</div>` : ''}
+        </button>`).join('')}
+      </div>`).join('');
+    results.querySelectorAll('[data-candidate-id]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const candidate = candidates.find((item) => item.tipo === button.dataset.candidateType && String(item.id) === button.dataset.candidateId);
+        if (candidate) selectCandidate(candidate);
+      });
+    });
+    if (selectedTitles.size) atualizarSelecaoTitulos();
+  }
+
+  async function loadCandidates(scope = 'SUGESTOES', page = 1) {
+    if (!results) return;
+    if (page === 1) results.innerHTML = '<div class="muted">Buscando candidatos...</div>';
+    if (moreButton) moreButton.disabled = true;
+    const params = new URLSearchParams({tipo: 'TODOS', escopo: scope, q: query?.value || '', pagina: page});
+    try {
+      const response = await fetch(`${form.dataset.candidateUrl}?${params}`, {headers: {'Accept': 'application/json'}});
+      const payload = await response.json();
+      if (!response.ok || !payload.ok) throw new Error(payload.message || 'Não foi possível buscar candidatos.');
+      currentCandidates = page === 1 ? payload.resultados : [...currentCandidates, ...payload.resultados];
+      currentScope = scope;
+      currentPage = payload.pagina;
+      renderCandidates(currentCandidates);
+      loaded = true;
+      if (moreButton) {
+        moreButton.hidden = !payload.tem_mais;
+        moreButton.disabled = false;
+      }
+      if (feedback) feedback.textContent = `${currentCandidates.length} de ${payload.total} candidato(s) elegível(is).`;
+    } catch (error) {
+      if (page === 1) results.innerHTML = '';
+      if (moreButton) moreButton.disabled = false;
+      if (feedback) feedback.textContent = error.message || 'Não foi possível buscar candidatos.';
+    }
+  }
+
+  action.addEventListener('change', () => {
+    picker.hidden = action.value !== 'VINCULAR';
+    if (action.value === 'VINCULAR' && !loaded && form.dataset.linkLocked !== 'true') loadCandidates();
+    if (action.value !== 'VINCULAR' && form.dataset.linkLocked !== 'true') {
+      titleInput.value = '';
+      movementInput.value = '';
+      installmentInput.value = '';
+      limparSelecaoMultipla();
+      if (target) target.hidden = true;
+    }
+  });
+  form.querySelector('[data-search-links]')?.addEventListener('click', () => loadCandidates('SUGESTOES'));
+  form.querySelector('[data-search-all]')?.addEventListener('click', () => loadCandidates('TODOS'));
+  moreButton?.addEventListener('click', () => loadCandidates(currentScope, currentPage + 1));
+  query?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') { event.preventDefault(); loadCandidates('TODOS'); }
+  });
+  form.querySelector('[data-clear-link]')?.addEventListener('click', () => {
+    titleInput.value = '';
+    movementInput.value = '';
+    installmentInput.value = '';
+    limparSelecaoMultipla();
+    target.hidden = true;
+    if (feedback) feedback.textContent = 'Selecione outro destino para o vínculo.';
+  });
+  if (action.value === 'VINCULAR' && !titleInput.value && !movementInput.value && !installmentInput.value && form.dataset.linkLocked !== 'true') loadCandidates();
+}
+
+document.querySelectorAll('[data-item-form]').forEach((form) => {
+  setupLinkPicker(form);
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const button = form.querySelector('button[type="submit"]');
+    const originalLabel = button.textContent;
+    button.disabled = true;
+    button.textContent = 'Salvando...';
+    try {
+      const response = await fetch(window.location.href, {method: 'POST', body: new FormData(form), headers: {'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json'}});
+      const payload = await response.json();
+      if (!response.ok || !payload.ok) throw new Error(payload.message || 'Não foi possível salvar o item.');
+      const row = form.closest('[data-item-row]');
+      row.querySelector('[data-item-status]').textContent = payload.item.status_display;
+      row.querySelector('[data-item-reason]').textContent = payload.item.motivo;
+      const cycleWarning = row.querySelector('[data-item-cycle-warning]');
+      if (cycleWarning) {
+        cycleWarning.textContent = payload.item.aviso_ciclo || '';
+        cycleWarning.hidden = !payload.item.aviso_ciclo;
+      }
+      markItemReviewed(row);
+      updateCounters(payload.contagens);
+      announce(payload.message);
+      removeReviewedFromCurrentFilter(row);
+    } catch (error) {
+      announce(error.message || 'Não foi possível salvar o item.', 'error');
+    } finally {
+      button.disabled = false;
+      button.textContent = originalLabel;
+    }
+  });
+});
+
+function batchFieldSummary() {
+  const fields = [
+    ['categoria', 'Categoria'],
+    ['pessoa', 'Pessoa'],
+    ['ambito', 'Âmbito'],
+    ['acao', 'Ação'],
+    ['observacao', 'Observação'],
+  ];
+  return fields.flatMap(([name, label]) => {
+    const control = batchForm?.elements[name];
+    if (!control?.value) return [];
+    const value = control.tagName === 'SELECT' ? control.selectedOptions[0]?.textContent.trim() : control.value.trim();
+    return value ? [{label, value}] : [];
+  });
+}
+
+function showBatchConfirmation() {
+  const changes = batchFieldSummary();
+  const scope = batchForm.elements.somente_status;
+  const scopeLabel = scope.selectedOptions[0]?.textContent.trim() || 'Todos os itens';
+  batchConfirmationList.replaceChildren();
+  [...changes, {label: 'Aplicar somente em', value: scopeLabel}].forEach(({label, value}) => {
+    const row = document.createElement('div');
+    row.className = 'batch-confirmation-item';
+    const term = document.createElement('dt');
+    const description = document.createElement('dd');
+    term.textContent = label;
+    description.textContent = value;
+    row.append(term, description);
+    batchConfirmationList.appendChild(row);
+  });
+  const selectedCount = selectableCheckboxes().filter((checkbox) => checkbox.checked).length;
+  batchConfirmationImpact.textContent = scope.value === 'SELECIONADOS'
+    ? `${selectedCount} item(ns) não revisado(s) selecionado(s). Itens já revisados serão preservados.`
+    : 'O backend aplicará a alteração apenas aos itens não revisados do escopo. Itens já revisados serão preservados.';
+  batchConfirmation.showModal();
+}
+
+async function applyBatchClassification() {
+  const button = batchForm.querySelector('button[type="submit"]');
+  const originalLabel = button.textContent;
+  button.disabled = true;
+  button.textContent = 'Aplicando...';
+  try {
+    const response = await fetch(batchForm.action, {method: 'POST', body: new FormData(batchForm), headers: {'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json'}});
+    const payload = await response.json();
+    if (!response.ok || !payload.ok) throw new Error(payload.message || 'Não foi possível aplicar a classificação.');
+    payload.items.forEach((item) => {
+      const row = document.querySelector(`[data-item-row="${item.id}"]`);
+      if (!row) return;
+      row.querySelector('[data-item-status]').textContent = item.status_display;
+      row.querySelector('[data-item-reason]').textContent = item.motivo;
+      const form = row.querySelector('[data-item-form]');
+      form.elements.categoria.value = item.categoria;
+      form.elements.pessoa.value = item.pessoa;
+      form.elements.ambito.value = item.ambito;
+      form.elements.acao.value = item.acao;
+      form.elements.observacao.value = item.observacao;
+      markItemReviewed(row);
+      removeReviewedFromCurrentFilter(row);
+    });
+    updateCounters(payload.contagens);
+    announce(payload.message);
+  } catch (error) {
+    announce(error.message || 'Não foi possível aplicar a classificação.', 'error');
+  } finally {
+    button.disabled = false;
+    button.textContent = originalLabel;
+  }
+}
+
+batchForm?.addEventListener('submit', (event) => {
+  event.preventDefault();
+  showBatchConfirmation();
+});
+batchConfirmation?.querySelector('[data-cancel-batch]')?.addEventListener('click', () => batchConfirmation.close());
+batchConfirmation?.querySelector('[data-confirm-batch]')?.addEventListener('click', () => {
+  batchConfirmation.close();
+  applyBatchClassification();
+});
+
+updateSelection();
+</script>
 {% endblock %}

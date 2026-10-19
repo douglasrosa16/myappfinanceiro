@@ -1,0 +1,26 @@
+services:
+  web:
+    build:
+      context: .
+    container_name: my-app-financeiro-web
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DJANGO_DEBUG: "False"
+      DJANGO_ALLOWED_HOSTS: "localhost,127.0.0.1,100.127.41.45,192.168.100.212,srv-bd.tail638df2.ts.net"
+      DJANGO_CSRF_TRUSTED_ORIGINS: "https://srv-bd.tail638df2.ts.net"
+      DJANGO_SECURE_PROXY_SSL_HEADER: "True"
+    ports:
+      - "8099:8000"
+    volumes:
+      - ./media:/app/media
+      - ./staticfiles:/app/staticfiles
+    command: >-
+      sh -c "python manage.py migrate --noinput &&
+      python manage.py collectstatic --noinput &&
+      gunicorn my_financeiro.wsgi:application
+      --bind 0.0.0.0:8000
+      --workers 3
+      --access-logfile -
+      --error-logfile -"

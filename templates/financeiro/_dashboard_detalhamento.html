@@ -1,0 +1,19 @@
+{% load financeiro_format %}
+<section class="dashboard-detail-content" aria-label="Detalhamento de {{ titulo_detalhamento }}">
+  <div class="dashboard-detail-summary">
+    <div>
+      <div class="eyebrow">Lançamentos que compõem o indicador</div>
+      <h3>{{ titulo_detalhamento }}</h3>
+      <p class="small">Período de {{ data_inicial|date:"d/m/Y" }} a {{ data_final|date:"d/m/Y" }}</p>
+    </div>
+    <div class="dashboard-detail-total">
+      <span class="small">Total no indicador</span>
+      <strong class="{{ total_indicador|classe_valor:'saida' }}">{{ total_indicador|brl_sinal }}</strong>
+    </div>
+  </div>
+  <p class="small transactions-count">{{ total_registros }} registros. Conta e cartão não são somados como um mesmo gasto.</p>
+  {% include "financeiro/_tabela_lancamentos.html" with mostrar_acoes=False valor_indicador=True mensagem_vazia="Nenhum lançamento compõe este indicador no período." %}
+  <div class="dashboard-detail-actions">
+    <a class="button" href="{{ lancamentos_url }}">Ver em lançamentos</a>
+  </div>
+</section>

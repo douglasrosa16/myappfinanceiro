@@ -1,0 +1,42 @@
+<script>
+  (() => {
+    const installButtons = Array.from(document.querySelectorAll('[data-pwa-install]'));
+    const standalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+    let installPrompt = null;
+
+    const hideInstallButtons = () => {
+      installButtons.forEach((button) => { button.hidden = true; });
+    };
+
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('{% url "pwa_service_worker" %}', {scope: '/'}).catch((error) => {
+          console.warn('Não foi possível registrar o modo aplicativo.', error);
+        });
+      });
+    }
+
+    if (standalone) {
+      hideInstallButtons();
+      return;
+    }
+
+    window.addEventListener('beforeinstallprompt', (event) => {
+      event.preventDefault();
+      installPrompt = event;
+      installButtons.forEach((button) => { button.hidden = false; });
+    });
+
+    installButtons.forEach((button) => {
+      button.addEventListener('click', async () => {
+        if (!installPrompt) return;
+        await installPrompt.prompt();
+        await installPrompt.userChoice;
+        installPrompt = null;
+        hideInstallButtons();
+      });
+    });
+
+    window.addEventListener('appinstalled', hideInstallButtons);
+  })();
+</script>

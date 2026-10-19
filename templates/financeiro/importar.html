@@ -1,19 +1,72 @@
 {% extends "financeiro/base.html" %}
-{% block title %}Importar OFX | myfinanceiro{% endblock %}
+{% load financeiro_format %}
+{% block title %}Importar OFX | My App Financeiro{% endblock %}
 {% block content %}
 <header class="top">
-  <div><div class="eyebrow">Importacao exclusiva por OFX</div><h1>Importar e revisar</h1></div>
+  <div><div class="eyebrow">Extrato bancário e fatura de cartão</div><h1>Importar e revisar OFX</h1></div>
 </header>
-<div class="notice">O arquivo sera salvo como lote em revisao. Registros reconhecidos nao devem ser confirmados como duplicados.</div>
-<section class="panel">
-  <form method="post" enctype="multipart/form-data" class="form">
+<div class="notice">O arquivo será analisado e conciliado antes de qualquer lançamento ser criado. Nome e hash repetidos não duplicam movimentos.</div>
+<details class="panel collapsible-panel">
+  <summary class="collapsible-summary">
+    <h2>Novo lote</h2><span class="collapsible-summary-meta">Importar arquivo OFX</span>
+    <span class="collapsible-toggle" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"></path></svg></span>
+  </summary>
+  <div class="collapsible-content">
+  <form method="post" enctype="multipart/form-data" class="form" id="ofxUploadForm" data-loading-label="Analisando arquivo..." data-loading-message="Lendo e conciliando o arquivo OFX...">
     {% csrf_token %}
     {% for field in form %}
-      <p>{{ field.label_tag }}{{ field.errors }}{{ field }}</p>
+      <p class="field" data-field="{{ field.name }}">{{ field.label_tag }}{{ field }}{% if field.help_text %}<span class="small">{{ field.help_text }}</span>{% endif %}</p>
     {% endfor %}
-    <div class="actions wide">
-      <button class="button" type="submit">Enviar para revisao</button>
-    </div>
+    <div class="actions wide"><button class="button" type="submit">Analisar arquivo</button></div>
   </form>
-</section>
+  </div>
+</details>
+<details class="panel collapsible-panel">
+  <summary class="collapsible-summary">
+    <h2>Planejar compras futuras do cartão</h2><span class="collapsible-summary-meta">Importar planilha</span>
+    <span class="collapsible-toggle" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"></path></svg></span>
+  </summary>
+  <div class="collapsible-content">
+  <p class="small">Use uma linha por compra. O sistema criará as parcelas como previstas e permitirá conciliá-las depois com o OFX da fatura.</p>
+  <p><a class="link-button" href="{% url 'baixar_modelo_planilha' %}">Baixar modelo CSV</a></p>
+  <form method="post" action="{% url 'importar_planilha' %}" enctype="multipart/form-data" class="form" id="planilhaUploadForm" data-loading-label="Analisando planilha..." data-loading-message="Validando compras futuras e preparando a revisão...">
+    {% csrf_token %}
+    {% for field in form_planilha %}
+      <p class="field" data-field-planilha="{{ field.name }}">{{ field.label_tag }}{{ field }}{% if field.help_text %}<span class="small">{{ field.help_text }}</span>{% endif %}</p>
+    {% endfor %}
+    <div class="actions wide"><button class="button" type="submit">Analisar planilha</button></div>
+  </form>
+  </div>
+</details>
+<details class="panel full collapsible-panel">
+  <summary class="collapsible-summary">
+    <h2>Importações recentes</h2><span class="collapsible-summary-meta">Últimos 7 registros</span>
+    <span class="collapsible-toggle" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"></path></svg></span>
+  </summary>
+  <div class="collapsible-content">
+  <table>
+    <thead><tr><th>Data</th><th>Arquivo</th><th>Origem</th><th>Conta/cartão</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+      {% for lote in importacoes %}
+      <tr>
+        <td>{{ lote.criado_em|date:"d/m/Y H:i" }}</td><td>{{ lote.nome_arquivo }}</td><td>{{ lote.get_origem_display }}</td>
+        <td>{{ lote.conta|default:lote.cartao }}</td><td><span class="pill {% if lote.status == 'EM_REVISAO' %}pill-review{% elif lote.status == 'CONFIRMADA' %}pill-completed{% elif lote.status == 'DESFEITA' %}pill-undone{% endif %}">{{ lote.get_status_display }}</span></td>
+        <td><div class="row-actions"><a class="icon-button icon-open" href="{% if lote.status == 'EM_REVISAO' %}{% url 'importacao_revisao' lote.pk %}{% else %}{% url 'importacao_resultado' lote.pk %}{% endif %}" aria-label="Abrir importação {{ lote.nome_arquivo }}" title="Abrir importação" data-loading-link data-loading-message="Abrindo importação..."><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3h7v7M21 3l-9 9"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></a>{% if lote.status == 'EM_REVISAO' %}<button class="icon-button icon-delete" type="button" aria-label="Excluir lote {{ lote.nome_arquivo }}" title="Excluir lote" data-confirm-delete="Excluir o lote em revisão '{{ lote.nome_arquivo }}'? O arquivo e todos os itens ainda não confirmados serão removidos." data-action="{% url 'importacao_excluir' lote.pk %}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 10v6M14 10v6"/></svg></button>{% endif %}</div></td>
+      </tr>
+      {% empty %}<tr><td colspan="6" class="muted">Nenhuma importação registrada.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+  </div>
+</details>
+<script>
+  const origem = document.getElementById('id_origem');
+  const campos = {conta: document.querySelector('[data-field="conta"]'), cartao: document.querySelector('[data-field="cartao"]'), ciclo: document.querySelector('[data-field="ciclo"]')};
+  function atualizarOrigem() {
+    const cartao = origem?.value === 'CARTAO';
+    if (campos.conta) campos.conta.style.display = cartao ? 'none' : 'grid';
+    if (campos.cartao) campos.cartao.style.display = cartao ? 'grid' : 'none';
+    if (campos.ciclo) campos.ciclo.style.display = cartao ? 'grid' : 'none';
+  }
+  origem?.addEventListener('change', atualizarOrigem); atualizarOrigem();
+</script>
 {% endblock %}
