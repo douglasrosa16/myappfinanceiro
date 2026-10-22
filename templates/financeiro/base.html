@@ -25,10 +25,11 @@
     .selection-toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:11px 14px;margin-bottom:12px;background:#f7f9fc;border:1px solid var(--line);border-radius:8px}.selection-toolbar input,.item-select input{width:auto}.import-items{display:grid;gap:12px}.import-item{border:1px solid var(--line);border-radius:9px;background:white;padding:15px;transition:border-color .15s,box-shadow .15s}.import-item.is-selected{border-color:#60a5fa;box-shadow:0 0 0 2px #60a5fa22}.import-item-head{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:start;margin-bottom:13px}.item-badges{display:flex;gap:6px;align-items:center;justify-content:flex-end;flex-wrap:wrap}.item-select{padding-top:2px}.item-title{font-weight:700}.item-editor-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:9px;align-items:end}.item-field-date,.item-field-value,.item-field-nature,.item-field-scope,.item-field-action{grid-column:span 2}.item-field-category,.item-field-person,.item-field-description{grid-column:span 3}.item-field-note{grid-column:span 4}.item-save{grid-column:span 1;display:flex;align-items:end}.item-save button{width:100%;min-width:84px}.selection-count{font-weight:700;color:var(--blue)}
     .errorlist{color:var(--danger);margin:0 0 6px;padding-left:18px}.pill{font-size:13px;border-radius:30px;padding:4px 9px;background:#f0f3f7;color:#59677a}.pill-review,.pill-active{background:#e6f6f0;color:#007c64}.pill-completed{background:#edf2fa;color:var(--blue)}.pill-undone,.pill-inactive{background:#fff0f2;color:#a62f42}.row{display:flex;justify-content:space-between;align-items:center;gap:15px}.row-actions{display:flex;gap:8px;align-items:center;min-width:112px}.link-button{color:var(--blue);background:none;border:0;padding:4px 0;font-size:14px;text-align:left}.icon-button{display:inline-grid;place-items:center;width:30px;height:30px;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--blue);padding:0}.icon-button:hover{background:#edf2fa;border-color:var(--line)}.icon-button svg{width:17px;height:17px;stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}.icon-open{color:#2769d8}.icon-edit{color:#2769d8}.icon-disable{color:#dc3545}.icon-enable{color:#00846b}.icon-delete{color:#6b7280}.icon-delete:hover{color:#4b5563}.danger{color:var(--danger)}.source{font-size:13px;color:var(--muted)}.small{font-size:14px;color:var(--muted)}.amount-positive{color:var(--green)}.amount-negative{color:var(--danger)}
     .toast-stack{position:fixed;top:18px;right:24px;z-index:1000;display:grid;gap:10px;width:min(360px,calc(100vw - 48px))}.toast{border:1px solid var(--line);border-left:4px solid #00846b;background:white;box-shadow:0 14px 40px #10274722;border-radius:8px;padding:12px 40px 12px 14px;font-size:14px;position:relative;animation:toast-in .18s ease-out}.toast.error{border-left-color:var(--danger)}.toast-close{position:absolute;right:8px;top:7px;border:0;background:transparent;color:var(--muted);font-size:20px;line-height:1;width:26px;height:26px;padding:0}.toast.is-hiding{opacity:0;transform:translateY(-6px);transition:opacity .2s ease,transform .2s ease}@keyframes toast-in{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
-    dialog{border:1px solid var(--line);border-radius:14px;padding:25px;max-width:740px;width:calc(100% - 32px);max-height:90vh;overflow:auto;color:var(--ink);box-shadow:0 20px 70px #0003}dialog::backdrop{background:#102747aa}.dialog-head{margin-bottom:22px}.dialog-head h2{margin:0}.dialog-head button{background:none;border:0;font-size:25px;padding:0 4px}.modal-loading-state,.modal-error-state{min-height:180px;display:flex;align-items:center;justify-content:center;gap:12px;text-align:center}.modal-loading-state{color:var(--muted);font-weight:650}.modal-error-state{flex-direction:column}.modal-error-state p{margin:0;color:var(--muted)}.modal-error-state .dialog-actions{margin-top:8px}.lancamento-form input,.lancamento-form select{min-height:42px}.lancamento-form.is-payment .field-cartao{grid-column:2}.person-autocomplete,.temporal-control{display:block;position:relative}.temporal-control>input:first-child{padding-right:42px}.temporal-control>button{position:absolute;right:1px;top:1px;width:40px;height:40px;display:grid;place-items:center;border:0;border-radius:0 7px 7px 0;background:white;color:var(--ink);padding:0}.temporal-control>button svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.temporal-native{position:absolute!important;right:8px;bottom:4px;width:1px!important;height:1px!important;min-height:0!important;opacity:0;pointer-events:none}.person-suggestions{position:absolute;z-index:10;top:calc(100% + 4px);left:0;right:0;max-height:190px;overflow-y:auto;padding:4px;background:white;border:1px solid var(--line);border-radius:7px;box-shadow:0 12px 30px #10274722}.person-suggestions[hidden]{display:none}.person-suggestions button{display:block;width:100%;border:0;border-radius:5px;background:white;color:var(--ink);padding:8px 10px;text-align:left}.person-suggestions button:hover,.person-suggestions button.is-active{background:#edf3fb}.form-note{color:var(--muted);font-size:14px;padding:12px;background:#edf3fb;border-radius:7px}.form-error{color:var(--danger);font-size:14px}.loading-overlay{position:fixed;inset:0;z-index:2000;display:grid;place-items:center;background:#10274766;backdrop-filter:blur(2px)}.loading-overlay[hidden]{display:none}.loading-box{display:flex;align-items:center;gap:12px;background:white;border-radius:10px;padding:16px 20px;box-shadow:0 16px 50px #10274744;font-weight:650}.loading-spinner{width:22px;height:22px;border:3px solid #dce3ec;border-top-color:var(--blue);border-radius:50%;animation:loading-spin .7s linear infinite}@keyframes loading-spin{to{transform:rotate(360deg)}}
-    @media(max-width:1100px){main{padding:24px}.kpis{grid-template-columns:repeat(2,1fr)}.grid{grid-template-columns:1fr}.item-editor-grid{grid-template-columns:repeat(6,minmax(0,1fr))}.item-field-date,.item-field-value,.item-field-nature,.item-field-scope,.item-field-action{grid-column:span 2}.item-field-category,.item-field-person,.item-field-description,.item-field-note{grid-column:span 3}.item-save{grid-column:span 2}}
+    dialog{border:1px solid var(--line);border-radius:14px;padding:25px;max-width:740px;width:calc(100% - 32px);max-height:90vh;overflow:auto;color:var(--ink);box-shadow:0 20px 70px #0003}dialog::backdrop{background:#102747aa}.dialog-head{margin-bottom:22px}.dialog-head h2{margin:0}.dialog-head button{background:none;border:0;font-size:25px;padding:0 4px}.modal-loading-state,.modal-error-state{min-height:180px;display:flex;align-items:center;justify-content:center;gap:12px;text-align:center}.modal-loading-state{color:var(--muted);font-weight:650}.modal-error-state{flex-direction:column}.modal-error-state p{margin:0;color:var(--muted)}.modal-error-state .dialog-actions{margin-top:8px}.lancamento-form input,.lancamento-form select{min-height:42px}.lancamento-form.is-payment .field-cartao{grid-column:2}.person-autocomplete,.temporal-control{display:block;position:relative}.temporal-control>input:first-child{padding-right:42px}.temporal-control>button{position:absolute;right:1px;top:1px;width:40px;height:40px;display:grid;place-items:center;border:0;border-radius:0 7px 7px 0;background:white;color:var(--ink);padding:0}.temporal-control>button svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.temporal-native{position:absolute!important;right:8px;bottom:4px;width:1px!important;height:1px!important;min-height:0!important;opacity:0;pointer-events:none}.person-suggestions{position:absolute;z-index:10;top:calc(100% + 4px);left:0;right:0;max-height:190px;overflow-y:auto;padding:4px;background:white;border:1px solid var(--line);border-radius:7px;box-shadow:0 12px 30px #10274722}.person-suggestions[hidden]{display:none}.person-suggestions button{display:block;width:100%;border:0;border-radius:5px;background:white;color:var(--ink);padding:8px 10px;text-align:left}.person-suggestions button:hover,.person-suggestions button.is-active{background:#edf3fb}.form-note{color:var(--muted);font-size:14px;padding:12px;background:#edf3fb;border-radius:7px}.rule-suggestion-status.is-error{background:#fff3f3;color:var(--danger)}.form-error{color:var(--danger);font-size:14px}.loading-overlay{position:fixed;inset:0;z-index:2000;display:grid;place-items:center;background:#10274766;backdrop-filter:blur(2px)}.loading-overlay[hidden]{display:none}.loading-box{display:flex;align-items:center;gap:12px;background:white;border-radius:10px;padding:16px 20px;box-shadow:0 16px 50px #10274744;font-weight:650}.loading-spinner{width:22px;height:22px;border:3px solid #dce3ec;border-top-color:var(--blue);border-radius:50%;animation:loading-spin .7s linear infinite}@keyframes loading-spin{to{transform:rotate(360deg)}}
+    #editor:has(.rule-form){max-width:980px;padding:20px}#editor:has(.rule-form) .dialog-head{margin-bottom:14px}.rule-form{grid-template-columns:1fr;gap:11px}.rule-form fieldset{min-width:0;margin:0;border:1px solid var(--line);border-radius:9px;padding:10px 12px}.rule-form legend{font-weight:700;padding:0 6px}.rule-form fieldset>.small{margin:0 0 7px}.rule-name-field input{min-height:40px}.rule-settings{display:grid;grid-template-columns:minmax(0,2fr) minmax(120px,1fr) minmax(110px,.7fr);gap:12px;align-items:start}.rule-active-field{align-content:start}.rule-active-field input{width:auto;min-height:20px;margin-top:8px}.rule-condition-list{display:grid;gap:8px;margin:8px 0}.rule-condition{display:grid;grid-template-columns:28px minmax(0,1fr) minmax(0,1fr) minmax(0,1.35fr) auto;gap:8px;align-items:end;width:100%;min-width:0;padding:8px;background:#f7f9fc;border:1px solid var(--line);border-radius:9px}.rule-condition.is-removed{display:none}.rule-condition .field,.rule-condition input,.rule-condition select{min-width:0}.rule-condition-order{align-self:center;display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:#e8eef8;color:var(--blue);font-size:13px;font-weight:750}.condition-value[hidden]{display:none}.rule-condition-actions{display:flex;align-items:center;gap:2px;padding-bottom:3px}.rule-condition-error{grid-column:2/-1}.rule-results-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.rule-form>.actions{margin-top:3px}.rule-summary-list{display:grid;gap:3px;margin-top:7px}.rules-registry form{margin:0}.rules-registry table{table-layout:fixed;min-width:880px}.rules-registry th:nth-child(1){width:18%}.rules-registry th:nth-child(2){width:22%}.rules-registry th:nth-child(3){width:22%}.rules-registry th:nth-child(4){width:18%}.rules-registry th:nth-child(5){width:9%}.rules-registry th:nth-child(6){width:11%}.rules-registry .row-actions{min-width:96px}
+    @media(max-width:1100px){main{padding:24px}.kpis{grid-template-columns:repeat(2,1fr)}.grid{grid-template-columns:1fr}.item-editor-grid{grid-template-columns:repeat(6,minmax(0,1fr))}.item-field-date,.item-field-value,.item-field-nature,.item-field-scope,.item-field-action{grid-column:span 2}.item-field-category,.item-field-person,.item-field-description,.item-field-note{grid-column:span 3}.item-save{grid-column:span 2}.rule-results-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
     @media(max-width:1024px){aside{position:relative;width:100%;padding:16px}.brand{font-size:22px}aside p,.aside-foot{display:none}.nav-scroll-shell{position:relative;display:block;margin-top:14px}nav{display:flex;align-items:flex-start;overflow:auto;margin-top:0;gap:4px;scrollbar-width:none}nav::-webkit-scrollbar{display:none}nav>a,.nav-group,.pwa-install-button{flex:0 0 auto}nav a,.nav-group-summary,.pwa-install-button{white-space:nowrap;padding:8px 10px}.nav-submenu{padding-left:10px}.nav-scroll-control{position:absolute;z-index:2;top:0;width:40px;height:42px;border:0;color:white;padding:0;place-items:center}.nav-scroll-control:not([hidden]){display:grid}.nav-scroll-control svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}.nav-scroll-left{left:0;background:linear-gradient(90deg,#102747 72%,#10274700)}.nav-scroll-right{right:0;background:linear-gradient(270deg,#102747 72%,#10274700)}.nav-logout{position:absolute;top:12px;right:10px;width:auto;margin:0;padding:0;border:0}.nav-logout button{width:auto;padding:8px}.nav-logout button span{display:none}main{margin:0;padding:20px 14px;width:100%}}
-    @media(max-width:700px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.grid,.form,.form-grid{grid-template-columns:1fr}.top{align-items:start;flex-direction:column}.form .wide,.form-grid .wide,.lancamento-form.is-payment .field-cartao{grid-column:auto}.item-editor-grid{grid-template-columns:1fr 1fr}.item-editor-grid>*{grid-column:span 1}.item-field-description,.item-field-note,.item-save{grid-column:1/-1}.import-item-head{grid-template-columns:auto minmax(0,1fr)}}
+    @media(max-width:700px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.grid,.form,.form-grid{grid-template-columns:1fr}.top{align-items:start;flex-direction:column}.form .wide,.form-grid .wide,.lancamento-form.is-payment .field-cartao{grid-column:auto}.item-editor-grid{grid-template-columns:1fr 1fr}.item-editor-grid>*{grid-column:span 1}.item-field-description,.item-field-note,.item-save{grid-column:1/-1}.import-item-head{grid-template-columns:auto minmax(0,1fr)}.rule-settings,.rule-results-grid{grid-template-columns:1fr}.rule-condition{grid-template-columns:28px minmax(0,1fr)}.rule-condition .field,.rule-condition-actions,.rule-condition-error{grid-column:2}.rule-condition-actions{justify-content:flex-end}.rule-condition-order{grid-row:1/span 3;align-self:start;margin-top:25px}.rule-form .actions{flex-direction:column-reverse}.rule-form .actions button{width:100%;justify-content:center}}
     .icon-clone{color:#00846b}
   </style>
 </head>
@@ -43,14 +44,16 @@
       <a href="{% url 'eventos' %}"{% if request.resolver_match.url_name == 'eventos' or request.resolver_match.url_name == 'evento_novo' and request.GET.return_to == 'eventos' or request.resolver_match.url_name == 'evento_editar' or request.resolver_match.url_name == 'parcela_cartao_editar' and request.GET.return_to == 'eventos' or request.resolver_match.url_name == 'parcela_lancamento_excluir' %} class="active" aria-current="page"{% endif %}><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"></path><circle cx="18" cy="17" r="2"></circle></svg><span>Lançamentos</span></a>
       <a href="{% url 'cartoes_faturas' %}"{% if request.resolver_match.url_name == 'cartoes_faturas' or request.resolver_match.url_name == 'compra_cartao_nova' or request.resolver_match.url_name == 'parcela_cartao_editar' and request.GET.return_to != 'eventos' %} class="active" aria-current="page"{% endif %}><svg aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M3 10h18M7 15h3"></path></svg><span>Cartões e faturas</span></a>
       <a href="{% url 'parcelas' %}"{% if request.resolver_match.url_name == 'parcelas' %} class="active" aria-current="page"{% endif %}><svg aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"></rect><path d="M8 3v4M16 3v4M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"></path></svg><span>Parcelas futuras</span></a>
+      <a href="{% url 'orcamentos' %}"{% if request.resolver_match.url_name == 'orcamentos' or request.resolver_match.url_name == 'orcamento_novo' or request.resolver_match.url_name == 'orcamento_editar' or request.resolver_match.url_name == 'orcamento_clonar' %} class="active" aria-current="page"{% endif %}><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"></path></svg><span>Orçamentos</span></a>
       <a href="{% url 'importar_ofx' %}"{% if request.resolver_match.url_name == 'importar_ofx' or request.resolver_match.url_name == 'importacao_revisao' or request.resolver_match.url_name == 'importacao_resultado' %} class="active" aria-current="page"{% endif %}><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M4 20h16"></path></svg><span>Importação</span></a>
-      <details class="nav-group{% if request.resolver_match.url_name == 'contas' or request.resolver_match.url_name == 'conta_nova' or request.resolver_match.url_name == 'conta_editar' or request.resolver_match.url_name == 'cartoes' or request.resolver_match.url_name == 'cartao_novo' or request.resolver_match.url_name == 'cartao_editar' or request.resolver_match.url_name == 'categorias' or request.resolver_match.url_name == 'categoria_nova' or request.resolver_match.url_name == 'categoria_editar' or request.resolver_match.url_name == 'pessoas' or request.resolver_match.url_name == 'pessoa_nova' or request.resolver_match.url_name == 'pessoa_editar' %} active{% endif %}"{% if request.resolver_match.url_name == 'contas' or request.resolver_match.url_name == 'conta_nova' or request.resolver_match.url_name == 'conta_editar' or request.resolver_match.url_name == 'cartoes' or request.resolver_match.url_name == 'cartao_novo' or request.resolver_match.url_name == 'cartao_editar' or request.resolver_match.url_name == 'categorias' or request.resolver_match.url_name == 'categoria_nova' or request.resolver_match.url_name == 'categoria_editar' or request.resolver_match.url_name == 'pessoas' or request.resolver_match.url_name == 'pessoa_nova' or request.resolver_match.url_name == 'pessoa_editar' %} open{% endif %}>
+      <details class="nav-group{% if request.resolver_match.url_name == 'contas' or request.resolver_match.url_name == 'conta_nova' or request.resolver_match.url_name == 'conta_editar' or request.resolver_match.url_name == 'cartoes' or request.resolver_match.url_name == 'cartao_novo' or request.resolver_match.url_name == 'cartao_editar' or request.resolver_match.url_name == 'categorias' or request.resolver_match.url_name == 'categoria_nova' or request.resolver_match.url_name == 'categoria_editar' or request.resolver_match.url_name == 'pessoas' or request.resolver_match.url_name == 'pessoa_nova' or request.resolver_match.url_name == 'pessoa_editar' or request.resolver_match.url_name == 'regras_categoria' or request.resolver_match.url_name == 'regra_categoria_nova' or request.resolver_match.url_name == 'regra_categoria_editar' %} active{% endif %}"{% if request.resolver_match.url_name == 'contas' or request.resolver_match.url_name == 'conta_nova' or request.resolver_match.url_name == 'conta_editar' or request.resolver_match.url_name == 'cartoes' or request.resolver_match.url_name == 'cartao_novo' or request.resolver_match.url_name == 'cartao_editar' or request.resolver_match.url_name == 'categorias' or request.resolver_match.url_name == 'categoria_nova' or request.resolver_match.url_name == 'categoria_editar' or request.resolver_match.url_name == 'pessoas' or request.resolver_match.url_name == 'pessoa_nova' or request.resolver_match.url_name == 'pessoa_editar' or request.resolver_match.url_name == 'regras_categoria' or request.resolver_match.url_name == 'regra_categoria_nova' or request.resolver_match.url_name == 'regra_categoria_editar' %} open{% endif %}>
         <summary class="nav-group-summary"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7h16M6 7V4h12v3M5 7l1 13h12l1-13M9 11v5M15 11v5"></path></svg><span>Cadastros</span><svg class="nav-group-chevron" aria-hidden="true" viewBox="0 0 24 24"><path d="m7 10 5 5 5-5"></path></svg></summary>
         <div class="nav-submenu">
           <a href="{% url 'cartoes' %}"{% if request.resolver_match.url_name == 'cartoes' or request.resolver_match.url_name == 'cartao_novo' or request.resolver_match.url_name == 'cartao_editar' %} class="active" aria-current="page"{% endif %}><svg aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M3 10h18M7 15h4"></path></svg><span>Cartões de crédito</span></a>
           <a href="{% url 'contas' %}"{% if request.resolver_match.url_name == 'contas' or request.resolver_match.url_name == 'conta_nova' or request.resolver_match.url_name == 'conta_editar' %} class="active" aria-current="page"{% endif %}><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 9h18M5 9v9M9 9v9M15 9v9M19 9v9M3 18h18M12 3 3 7h18z"></path></svg><span>Contas financeiras</span></a>
           <a href="{% url 'categorias' %}"{% if request.resolver_match.url_name == 'categorias' or request.resolver_match.url_name == 'categoria_nova' or request.resolver_match.url_name == 'categoria_editar' %} class="active" aria-current="page"{% endif %}><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"></path></svg><span>Categorias</span></a>
           <a href="{% url 'pessoas' %}"{% if request.resolver_match.url_name == 'pessoas' or request.resolver_match.url_name == 'pessoa_nova' or request.resolver_match.url_name == 'pessoa_editar' %} class="active" aria-current="page"{% endif %}><svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0 1 16 0"></path></svg><span>Pessoas</span></a>
+          <a href="{% url 'regras_categoria' %}"{% if request.resolver_match.url_name == 'regras_categoria' or request.resolver_match.url_name == 'regra_categoria_nova' or request.resolver_match.url_name == 'regra_categoria_editar' %} class="active" aria-current="page"{% endif %}><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 6h10M4 12h16M4 18h8"></path><circle cx="18" cy="6" r="2"></circle><circle cx="15" cy="18" r="2"></circle></svg><span>Regras</span></a>
         </div>
       </details>
       <button class="pwa-install-button" type="button" data-pwa-install hidden><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M5 20h14"></path></svg><span>Instalar aplicativo</span></button>
@@ -237,6 +240,184 @@
       update();
     }
 
+    function bindRegraLancamentoSuggestion(form) {
+      const url = form?.dataset.regraSugestaoUrl;
+      if (!url || form.dataset.regraSugestaoBound === 'true') return;
+      form.dataset.regraSugestaoBound = 'true';
+
+      const controls = Object.fromEntries(
+        ['descricao', 'observacao', 'natureza', 'valor', 'origem', 'conta', 'cartao', 'categoria', 'ambito', 'pessoa', 'pessoa_nome_livre']
+          .map((name) => [name, form.querySelector(`[name="${name}"]`)])
+      );
+      const status = form.querySelector('[data-regra-sugestao-status]');
+      const csrf = form.querySelector('[name="csrfmiddlewaretoken"]');
+      const protectedAfterValidation = form.dataset.sugestaoResultadosProtegidos === 'true';
+      const locked = new Set(protectedAfterValidation ? ['categoria', 'pessoa', 'ambito', 'natureza'] : []);
+      const automatic = new Set();
+      const baseline = {
+        categoria: controls.categoria?.value || '',
+        pessoa: controls.pessoa?.value || '',
+        pessoa_nome_livre: controls.pessoa_nome_livre?.value || '',
+        ambito: controls.ambito?.value || '',
+        natureza: controls.natureza?.value || '',
+      };
+      let applying = false;
+      let timer = null;
+      let controller = null;
+      let sequence = 0;
+
+      const showStatus = (message, error = false) => {
+        if (!status) return;
+        status.textContent = message;
+        status.hidden = !message;
+        status.classList.toggle('is-error', error);
+      };
+      const dispatchChange = (control) => {
+        control?.dispatchEvent(new Event('change', {bubbles: true}));
+      };
+      const selectValue = (key, value) => {
+        const control = controls[key];
+        if (!control || !Array.from(control.options || []).some((option) => option.value === String(value))) return false;
+        control.value = String(value);
+        automatic.add(key);
+        dispatchChange(control);
+        return true;
+      };
+      const personValue = (suggestion) => {
+        if (!controls.pessoa || !controls.pessoa_nome_livre || !suggestion) return false;
+        controls.pessoa.value = String(suggestion.id);
+        controls.pessoa_nome_livre.value = suggestion.rotulo;
+        automatic.add('pessoa');
+        return true;
+      };
+      const restore = (key) => {
+        if (locked.has(key) || !automatic.has(key)) return;
+        if (key === 'pessoa') {
+          if (controls.pessoa) controls.pessoa.value = baseline.pessoa;
+          if (controls.pessoa_nome_livre) controls.pessoa_nome_livre.value = baseline.pessoa_nome_livre;
+        } else if (controls[key]) {
+          controls[key].value = baseline[key];
+          dispatchChange(controls[key]);
+        }
+        automatic.delete(key);
+      };
+      const markManual = (key) => {
+        if (applying) return;
+        locked.add(key);
+        automatic.delete(key);
+      };
+
+      controls.categoria?.addEventListener('change', () => markManual('categoria'));
+      controls.ambito?.addEventListener('change', () => markManual('ambito'));
+      controls.natureza?.addEventListener('change', () => markManual('natureza'));
+      controls.pessoa_nome_livre?.addEventListener('input', () => markManual('pessoa'));
+      controls.pessoa_nome_livre?.addEventListener('change', () => markManual('pessoa'));
+
+      const usefulValue = () => Boolean(
+        controls.descricao?.value.trim()
+        || controls.observacao?.value.trim()
+        || controls.valor?.value.trim()
+        || controls.natureza?.value
+        || controls.origem?.value
+        || controls.conta?.value
+        || controls.cartao?.value
+      );
+      const payload = () => {
+        const data = new FormData();
+        if (csrf) data.append('csrfmiddlewaretoken', csrf.value);
+        ['descricao', 'observacao', 'natureza', 'valor', 'origem', 'conta', 'cartao'].forEach((name) => {
+          data.append(name, controls[name]?.value || '');
+        });
+        return data;
+      };
+      const applyResponse = (data) => {
+        applying = true;
+        let applied = false;
+        try {
+          if (!data.encontrada) {
+            ['categoria', 'pessoa', 'ambito', 'natureza'].forEach(restore);
+            showStatus('');
+            return;
+          }
+          const suggestions = data.sugestoes || {};
+          if (!locked.has('categoria')) {
+            if (suggestions.categoria) applied = selectValue('categoria', suggestions.categoria.id) || applied;
+            else restore('categoria');
+          }
+          if (!locked.has('pessoa')) {
+            if (suggestions.pessoa) applied = personValue(suggestions.pessoa) || applied;
+            else restore('pessoa');
+          }
+          if (!locked.has('ambito')) {
+            if (suggestions.ambito) applied = selectValue('ambito', suggestions.ambito) || applied;
+            else restore('ambito');
+          }
+          if (!locked.has('natureza')) {
+            if (suggestions.natureza) applied = selectValue('natureza', suggestions.natureza) || applied;
+            else restore('natureza');
+          }
+          const ruleName = data.regra?.nome || 'selecionada';
+          showStatus(
+            applied
+              ? `Sugestão aplicada pela regra “${ruleName}”.`
+              : `Regra “${ruleName}” encontrada; suas escolhas foram preservadas.`
+          );
+        } finally {
+          applying = false;
+        }
+      };
+      const requestSuggestion = async () => {
+        window.clearTimeout(timer);
+        if (!usefulValue()) {
+          applying = true;
+          try {
+            ['categoria', 'pessoa', 'ambito', 'natureza'].forEach(restore);
+            showStatus('');
+          } finally {
+            applying = false;
+          }
+          return;
+        }
+        const currentSequence = ++sequence;
+        controller?.abort();
+        controller = new AbortController();
+        try {
+          const response = await fetch(url, {
+            method: 'POST',
+            body: payload(),
+            headers: {'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json'},
+            signal: controller.signal,
+          });
+          if (!response.ok) throw new Error(`Falha ao consultar sugestões (${response.status})`);
+          const data = await response.json();
+          if (currentSequence !== sequence) return;
+          applyResponse(data);
+        } catch (error) {
+          if (error.name === 'AbortError' || currentSequence !== sequence) return;
+          showStatus('Não foi possível atualizar as sugestões agora.', true);
+        } finally {
+          if (currentSequence === sequence) controller = null;
+        }
+      };
+      const scheduleSuggestion = () => {
+        if (applying) return;
+        window.clearTimeout(timer);
+        sequence += 1;
+        controller?.abort();
+        controller = null;
+        timer = window.setTimeout(requestSuggestion, 350);
+      };
+      ['descricao', 'observacao', 'valor'].forEach((name) => {
+        controls[name]?.addEventListener('input', scheduleSuggestion);
+      });
+      ['natureza', 'origem', 'conta', 'cartao'].forEach((name) => {
+        controls[name]?.addEventListener('change', () => {
+          if (!applying) requestSuggestion();
+        });
+      });
+      window.setTimeout(requestSuggestion, 0);
+    }
+
     function bindCategoriaFields(form) {
       if (!form?.matches('[data-categoria-form]') || form.dataset.categoriaBound === 'true') return;
       form.dataset.categoriaBound = 'true';
@@ -259,6 +440,103 @@
       essencialidade.addEventListener('change', () => {
         sugerirResultado(essencialidade.value !== 'NEUTRO');
       });
+    }
+
+    function bindRegraCategoriaForm(form) {
+      if (!form?.matches('[data-regra-categoria-form]') || form.dataset.regraCategoriaBound === 'true') return;
+      form.dataset.regraCategoriaBound = 'true';
+      const list = form.querySelector('[data-condition-list]');
+      const template = form.querySelector('[data-condition-template]');
+      const totalForms = form.querySelector('[name$="-TOTAL_FORMS"]');
+      const allowedOperators = {
+        DESCRICAO: ['CONTEM', 'NAO_CONTEM', 'IGUAL', 'DIFERENTE', 'COMECA_COM', 'TERMINA_COM'],
+        OBSERVACAO: ['CONTEM', 'NAO_CONTEM', 'IGUAL', 'DIFERENTE', 'COMECA_COM', 'TERMINA_COM'],
+        VALOR: ['IGUAL', 'DIFERENTE', 'MAIOR', 'MAIOR_IGUAL', 'MENOR', 'MENOR_IGUAL'],
+        NATUREZA: ['IGUAL', 'DIFERENTE'],
+        ORIGEM: ['IGUAL', 'DIFERENTE'],
+        CONTA: ['IGUAL', 'DIFERENTE'],
+        CARTAO: ['IGUAL', 'DIFERENTE'],
+      };
+      const valueType = {
+        DESCRICAO: 'TEXT',
+        OBSERVACAO: 'TEXT',
+        VALOR: 'TEXT',
+        NATUREZA: 'NATUREZA',
+        ORIGEM: 'ORIGEM',
+        CONTA: 'CONTA',
+        CARTAO: 'CARTAO',
+      };
+      if (!list || !template || !totalForms) return;
+
+      const activeRows = () => Array.from(list.querySelectorAll('[data-condition-row]')).filter((row) => !row.classList.contains('is-removed'));
+      const renumber = () => {
+        const rows = activeRows();
+        rows.forEach((row, index) => {
+          const order = row.querySelector('[name$="-ordem"]');
+          const number = row.querySelector('[data-condition-number]');
+          if (order) order.value = String(index + 1);
+          if (number) number.textContent = String(index + 1);
+          const up = row.querySelector('[data-condition-up]');
+          const down = row.querySelector('[data-condition-down]');
+          if (up) up.disabled = index === 0;
+          if (down) down.disabled = index === rows.length - 1;
+        });
+      };
+      const bindRow = (row) => {
+        if (!row || row.dataset.conditionBound === 'true') return;
+        row.dataset.conditionBound = 'true';
+        const field = row.querySelector('[name$="-campo"]');
+        const operator = row.querySelector('[name$="-operador"]');
+        const deleted = row.querySelector('[name$="-DELETE"]');
+        const update = () => {
+          const permitted = allowedOperators[field?.value] || allowedOperators.DESCRICAO;
+          Array.from(operator?.options || []).forEach((option) => {
+            const visible = !option.value || permitted.includes(option.value);
+            option.hidden = !visible;
+            option.disabled = !visible;
+          });
+          if (operator && !permitted.includes(operator.value)) operator.value = permitted[0];
+          const target = valueType[field?.value] || 'TEXT';
+          row.querySelectorAll('[data-condition-value]').forEach((wrapper) => {
+            const visible = wrapper.dataset.conditionValue === target;
+            wrapper.hidden = !visible;
+            wrapper.querySelectorAll('input,select,textarea').forEach((control) => {
+              control.disabled = !visible;
+            });
+          });
+        };
+        if (deleted?.checked) row.classList.add('is-removed');
+        field?.addEventListener('change', update);
+        row.querySelector('[data-condition-remove]')?.addEventListener('click', () => {
+          if (deleted) deleted.checked = true;
+          row.classList.add('is-removed');
+          renumber();
+        });
+        row.querySelector('[data-condition-up]')?.addEventListener('click', () => {
+          const rows = activeRows();
+          const index = rows.indexOf(row);
+          if (index > 0) list.insertBefore(row, rows[index - 1]);
+          renumber();
+        });
+        row.querySelector('[data-condition-down]')?.addEventListener('click', () => {
+          const rows = activeRows();
+          const index = rows.indexOf(row);
+          if (index >= 0 && index < rows.length - 1) list.insertBefore(rows[index + 1], row);
+          renumber();
+        });
+        update();
+      };
+
+      list.querySelectorAll('[data-condition-row]').forEach(bindRow);
+      form.querySelector('[data-condition-add]')?.addEventListener('click', () => {
+        const index = Number(totalForms.value);
+        list.insertAdjacentHTML('beforeend', template.innerHTML.replaceAll('__prefix__', String(index)));
+        totalForms.value = String(index + 1);
+        bindRow(list.lastElementChild);
+        renumber();
+      });
+      form.addEventListener('submit', renumber);
+      renumber();
     }
 
     function bindPessoaAutocomplete(form) {
@@ -305,6 +583,7 @@
       const select = (option) => {
         input.value = option.dataset.personName;
         hidden.value = option.dataset.personId;
+        input.dispatchEvent(new Event('change', {bubbles: true}));
         close();
         input.focus();
       };
@@ -377,7 +656,9 @@
       const form = editorBody.querySelector('form');
       if (!form) return;
       bindLancamentoFields(form);
+      bindRegraLancamentoSuggestion(form);
       bindCategoriaFields(form);
+      bindRegraCategoriaForm(form);
       bindPessoaAutocomplete(form);
       bindTemporalPickers(form);
       form.addEventListener('submit', async (event) => {
@@ -515,7 +796,9 @@
     });
     document.querySelectorAll('.toast').forEach(scheduleToast);
     document.querySelectorAll('[data-lancamento-form]').forEach(bindLancamentoFields);
+    document.querySelectorAll('[data-regra-sugestao-url]').forEach(bindRegraLancamentoSuggestion);
     document.querySelectorAll('[data-categoria-form]').forEach(bindCategoriaFields);
+    document.querySelectorAll('[data-regra-categoria-form]').forEach(bindRegraCategoriaForm);
     document.querySelectorAll('form').forEach(bindPessoaAutocomplete);
     document.querySelectorAll('form').forEach(bindTemporalPickers);
     editor?.addEventListener('cancel', cancelModalRequest);

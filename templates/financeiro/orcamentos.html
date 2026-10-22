@@ -1,0 +1,155 @@
+{% extends "financeiro/base.html" %}
+{% load financeiro_format %}
+{% block title %}Orçamentos | My App Financeiro{% endblock %}
+{% block content %}
+<style>
+  .budget-filters{align-items:end}
+  .budget-filter-field{display:grid;gap:5px;font-size:14px}
+  .budget-filters .budget-filter-field select,.budget-filters .budget-filter-field input{width:100%;max-width:none;min-width:0}
+  .budget-filter-category{flex:1 1 360px;min-width:280px}
+  .budget-filter-scope{flex:0 1 240px;min-width:210px}
+  .budget-filter-period{flex:0 0 140px;min-width:140px}
+  .budget-table{min-width:1080px}
+  .budget-realized{color:var(--danger);font-weight:700;white-space:nowrap}
+  .budget-realized-content{display:inline-flex;align-items:center;gap:7px}
+  .budget-detail-button{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;color:var(--blue);border-radius:50%;transition:background .15s ease,color .15s ease}
+  .budget-detail-button:hover{background:#e8f1fc;color:#0757a8}
+  .budget-detail-button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+  .budget-detail-button svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+  .budget-detail-button.is-disabled{color:var(--muted);opacity:.45;cursor:not-allowed}
+  .budget-detail-button.is-disabled:hover{background:transparent;color:var(--muted)}
+  .budget-progress-cell{min-width:230px}
+  .budget-progress-content{display:flex;align-items:center;gap:10px}
+  .budget-progress-value{flex:0 0 auto;min-width:62px;font-weight:700;text-align:right;white-space:nowrap}
+  .budget-progress-track{flex:1 1 auto;min-width:110px;height:9px;border-radius:10px;background:#eef2f8;overflow:hidden}
+  .budget-progress-fill{display:block;height:100%;border-radius:10px;width:0}
+  .budget-progress-blue .budget-progress-value{color:var(--blue)}
+  .budget-progress-blue .budget-progress-fill{background:var(--blue)}
+  .budget-progress-orange .budget-progress-value{color:#c56a00}
+  .budget-progress-orange .budget-progress-fill{background:#d97706}
+  .budget-progress-red .budget-progress-value{color:var(--danger)}
+  .budget-progress-red .budget-progress-fill{background:var(--danger)}
+  .budget-progress-neutral .budget-progress-value{color:var(--muted)}
+  .budget-progress-neutral .budget-progress-fill{background:var(--line)}
+  .budget-detail-dialog{width:min(980px,calc(100vw - 32px));max-height:calc(100vh - 32px);padding:0;border:0;border-radius:12px;box-shadow:0 24px 70px rgba(15,35,60,.28);color:var(--ink)}
+  .budget-detail-dialog::backdrop{background:rgba(12,27,45,.54)}
+  .budget-detail-dialog .dialog-head{position:sticky;top:0;z-index:2;justify-content:space-between;align-items:center;padding:18px 22px;background:white;border-bottom:1px solid var(--line)}
+  .budget-detail-dialog .dialog-head h2{margin:0}
+  .budget-detail-dialog .dialog-close{font-size:26px;line-height:1;background:transparent;border:0;color:var(--muted);cursor:pointer}
+  .budget-detail-body{padding:22px;overflow:auto}
+  .budget-detail-loading{display:flex;align-items:center;justify-content:center;min-height:180px;color:var(--muted)}
+  .budget-detail-error{display:grid;gap:12px;justify-items:start;padding:22px;border:1px solid #f4c7c7;border-radius:8px;background:#fff7f7;color:var(--danger)}
+  @media(max-width:700px){
+    .budget-filter-category,.budget-filter-scope,.budget-filter-period{flex:1 1 100%;width:100%;min-width:100%}
+    .budget-filters .secondary{width:100%}
+  }
+</style>
+<header class="top">
+  <div><div class="eyebrow">Planejamento</div><h1>Orçamentos</h1></div>
+  <a class="button" href="{% url 'orcamento_novo' %}?{{ filtros_query }}" data-modal-url="{% url 'orcamento_novo' %}?{{ filtros_query }}" data-modal-title="Novo orçamento">Novo orçamento</a>
+</header>
+<section class="panel full registry-panel">
+  <form class="filters budget-filters" method="get" aria-label="Filtros dos orçamentos">
+    <label class="budget-filter-field budget-filter-category">Categoria
+      <select name="categoria" aria-label="Categoria" onchange="this.form.submit()">
+        <option value="">Todas as categorias</option>
+        {% for categoria in categorias %}<option value="{{ categoria.pk }}"{% if categoria_filtro == categoria.pk|stringformat:'s' %} selected{% endif %}>{{ categoria.rotulo_com_pai }}</option>{% endfor %}
+      </select>
+    </label>
+    <label class="budget-filter-field budget-filter-scope">Âmbito
+      <select name="ambito" aria-label="Âmbito" onchange="this.form.submit()">
+        <option value="">Todos os âmbitos</option>
+        {% for valor, rotulo in ambitos %}<option value="{{ valor }}"{% if ambito_filtro == valor %} selected{% endif %}>{{ rotulo }}</option>{% endfor %}
+      </select>
+    </label>
+    <label class="budget-filter-field budget-filter-period">Período
+      <input name="mes" aria-label="Período" placeholder="MM/AAAA" inputmode="numeric" data-month-input="true" value="{{ mes_filtro }}">
+    </label>
+    <button class="secondary" type="submit">Filtrar</button>
+    <a class="secondary" href="{% url 'orcamentos' %}?mes=">Limpar filtros</a>
+  </form>
+  <table class="budget-table">
+    <thead><tr><th>Categoria</th><th>Mês</th><th>Âmbito</th><th>Limite</th><th>Realizado</th><th>% realizado</th><th>Ações</th></tr></thead>
+    <tbody>
+      {% for orcamento in orcamentos %}
+      <tr>
+        <td><strong>{{ orcamento.categoria.rotulo_com_pai }}</strong></td>
+        <td>{{ orcamento.mes|slice:'5:7' }}/{{ orcamento.mes|slice:':4' }}</td>
+        <td>{{ orcamento.get_ambito_display }}</td>
+        <td>{{ orcamento.limite|brl }}</td>
+        <td class="budget-realized"><span class="budget-realized-content"><span>{{ orcamento.realizado|brl_sinal }}</span>{% if orcamento.realizado %}<a class="budget-detail-button" href="{{ orcamento.lancamentos_url }}" data-budget-detail-url="{{ orcamento.detalhe_url }}" aria-label="Ver lançamentos que compõem o realizado de {{ orcamento.categoria.rotulo_com_pai }} em {{ orcamento.mes|slice:'5:7' }}/{{ orcamento.mes|slice:':4' }}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg></a>{% else %}<span class="budget-detail-button is-disabled" aria-disabled="true" title="Não há lançamentos para detalhar" aria-label="Sem lançamentos realizados para detalhar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg></span>{% endif %}</span></td>
+        <td class="budget-progress-cell budget-progress-{{ orcamento.faixa_percentual }}">
+          <div class="budget-progress-content">
+            <span class="budget-progress-value">{% if orcamento.percentual_realizado is None %}—{% else %}{{ orcamento.percentual_realizado|floatformat:2 }}%{% endif %}</span>
+            <div class="budget-progress-track" role="img" aria-label="{% if orcamento.percentual_realizado is None %}Percentual indisponível porque o limite é menor ou igual a zero{% else %}{{ orcamento.percentual_realizado|floatformat:2 }}% realizado: {{ orcamento.realizado|brl_sinal }} de {{ orcamento.limite|brl }}{% endif %}">
+              <span class="budget-progress-fill" style="width:{{ orcamento.percentual_css }}%"></span>
+            </div>
+          </div>
+        </td>
+        <td><div class="row-actions">
+          <a class="icon-button icon-edit" href="{% url 'orcamento_editar' orcamento.pk %}?{{ filtros_query }}" data-modal-url="{% url 'orcamento_editar' orcamento.pk %}?{{ filtros_query }}" data-modal-title="Editar orçamento" title="Editar" aria-label="Editar orçamento"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></a>
+          <a class="icon-button icon-clone" href="{% url 'orcamento_clonar' orcamento.pk %}?{{ filtros_query }}" data-modal-url="{% url 'orcamento_clonar' orcamento.pk %}?{{ filtros_query }}" data-modal-title="Clonar orçamento" title="Clonar" aria-label="Clonar orçamento"><svg viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg></a>
+          <button class="icon-button icon-delete" type="button" data-action="{% url 'orcamento_excluir' orcamento.pk %}?{{ filtros_query }}" data-confirm-delete="Excluir o orçamento de {{ orcamento.categoria.rotulo_com_pai }} para {{ orcamento.mes|slice:'5:7' }}/{{ orcamento.mes|slice:':4' }}?" title="Excluir" aria-label="Excluir orçamento"><svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg></button>
+        </div></td>
+      </tr>
+      {% empty %}<tr><td colspan="7" class="muted">Nenhum orçamento encontrado.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</section>
+<dialog id="budgetDetailDialog" class="budget-detail-dialog" aria-labelledby="budgetDetailTitle">
+  <div class="row dialog-head"><h2 id="budgetDetailTitle">Detalhamento dos lançamentos</h2><button class="dialog-close" type="button" data-close-budget-detail aria-label="Fechar detalhamento">&times;</button></div>
+  <div class="budget-detail-body" data-budget-detail-body></div>
+</dialog>
+<script>
+(() => {
+  const dialog = document.getElementById("budgetDetailDialog");
+  const body = dialog?.querySelector("[data-budget-detail-body]");
+  let detailTrigger = null;
+
+  const showError = (fallbackUrl) => {
+    body.innerHTML = "";
+    const error = document.createElement("div");
+    error.className = "budget-detail-error";
+    const message = document.createElement("span");
+    message.textContent = "Não foi possível carregar o detalhamento agora.";
+    const link = document.createElement("a");
+    link.className = "secondary";
+    link.href = fallbackUrl;
+    link.textContent = "Abrir em Lançamentos";
+    error.append(message, link);
+    body.appendChild(error);
+  };
+
+  const openDetail = async (trigger) => {
+    detailTrigger = trigger;
+    body.innerHTML = '<div class="budget-detail-loading" role="status">Carregando detalhamento…</div>';
+    if (!dialog.open) dialog.showModal();
+    try {
+      const response = await fetch(trigger.dataset.budgetDetailUrl, {
+        headers: {"X-Requested-With": "XMLHttpRequest"},
+      });
+      if (!response.ok) throw new Error("Falha ao carregar detalhamento");
+      body.innerHTML = await response.text();
+    } catch (error) {
+      showError(trigger.href);
+    }
+  };
+
+  document.addEventListener("click", (event) => {
+    const close = event.target.closest("[data-close-budget-detail]");
+    if (close) {
+      dialog.close();
+      return;
+    }
+    const trigger = event.target.closest("[data-budget-detail-url]");
+    if (!trigger) return;
+    event.preventDefault();
+    openDetail(trigger);
+  });
+  dialog?.addEventListener("close", () => {
+    detailTrigger?.focus();
+    detailTrigger = null;
+  });
+})();
+</script>
+{% endblock %}

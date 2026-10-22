@@ -35,6 +35,12 @@ from financeiro.ofx import CartaoOFXAdapter, OFXDocument, normalize_text, transa
 from financeiro.services.titulos import liquidar_titulo
 from financeiro.services.fechamento_faturas import criar_transporte, recalcular_titulo
 from financeiro.services.saldo_contas import reprocessar_saldo_conta
+from financeiro.services.regras_categoria import (
+    ConjuntoRegrasCategoria,
+    NATUREZAS_FORA_DO_MOTOR,
+    avaliar_e_aplicar_regra,
+    carregar_regras_categoria,
+)
 from financeiro.vencimentos_cartao import resolver_vencimento_fatura
 
 
@@ -169,6 +175,7 @@ def _parcelas_elegiveis_vinculo(item: ItemImportacao, usuario):
         or not item.importacao.cartao_id
         or not item.importacao.ciclo
         or not valor
+        or item.natureza not in {NaturezaEvento.DESPESA, NaturezaEvento.ESTORNO}
     ):
         return ParcelaCartao.objects.none()
 
@@ -450,15 +457,14 @@ def criar_itens(importacao: Importacao, documento: OFXDocument) -> list[ItemImpo
             acao=ItemImportacao.Acao.CRIAR,
         )
         itens.append(item)
-    contexto = preparar_contexto_classificacao(importacao, itens)
     for item in itens:
-        _sugerir_categoria(item, contexto["regras"])
         _conciliar_item(item)
         if not item.data or item.valor is None:
             item.status = ItemImportacao.Status.PENDENTE
             item.motivo_status = "Data ou valor ausente no registro OFX."
-        else:
-            aplicar_sugestao_classificacao(item, contexto)
+    contexto = preparar_contexto_classificacao(importacao, itens)
+    for item in itens:
+        aplicar_sugestao_classificacao(item, contexto)
     ItemImportacao.objects.bulk_create(itens)
     _copiar_titulos_multiplos_reimportados(itens)
     return itens
@@ -480,24 +486,19 @@ def _chave_item(importacao: Importacao, registro, ocorrencia: int) -> str:
     )
 
 
-def _sugerir_categoria(item: ItemImportacao, regras=None) -> None:
-    if regras is None:
-        regras = RegraCategoria.objects.filter(
-            usuario=item.importacao.usuario,
-            ativa=True,
-        ).select_related("categoria", "pessoa")
-    descricao = normalize_text(item.descricao_original)
-    ambito_informado = getattr(item, "_ambito_informado", False)
-    for regra in regras:
-        if normalize_text(regra.texto) not in descricao:
-            continue
-        if item.categoria_id is None:
-            item.categoria = regra.categoria
-        if item.pessoa_id is None and regra.pessoa_id:
-            item.pessoa = regra.pessoa
-        if not ambito_informado and item.ambito in {None, "", Ambito.NAO_DEFINIDO}:
-            item.ambito = regra.ambito
-        return
+def _sugerir_categoria(item: ItemImportacao, regras=None):
+    """Compatibilidade interna para chamadas anteriores ao motor da Fase 2."""
+    if isinstance(regras, ConjuntoRegrasCategoria):
+        conjunto = regras
+    elif regras is None:
+        conjunto = carregar_regras_categoria(item.importacao.usuario)
+    else:
+        regras = tuple(regras)
+        conjunto = ConjuntoRegrasCategoria(
+            novas=tuple(regra for regra in regras if regra.versao_motor == RegraCategoria.VersaoMotor.NOVO),
+            legadas=tuple(regra for regra in regras if regra.versao_motor == RegraCategoria.VersaoMotor.LEGADO),
+        )
+    return avaliar_e_aplicar_regra(item, conjunto)
 
 
 def _historico_conta(importacao: Importacao, itens: list[ItemImportacao]) -> list[dict]:
@@ -577,16 +578,17 @@ def _historico_cartao(importacao: Importacao) -> list[dict]:
 
 
 def preparar_contexto_classificacao(importacao: Importacao, itens: list[ItemImportacao]) -> dict:
-    regras = list(
-        RegraCategoria.objects.filter(usuario=importacao.usuario, ativa=True)
-        .select_related("categoria", "pessoa")
-    )
+    regras = carregar_regras_categoria(importacao.usuario)
     historico = (
         _historico_conta(importacao, itens)
         if importacao.origem == Importacao.Origem.CONTA
         else _historico_cartao(importacao)
     )
-    return {"regras": regras, "historico": historico}
+    return {
+        "regras_categoria": regras,
+        "regras": list(regras.legadas),
+        "historico": historico,
+    }
 
 
 def _sugerir_valor_historico(item: ItemImportacao, historico: list[dict], chave: str):
@@ -632,21 +634,72 @@ def _sugerir_valor_historico(item: ItemImportacao, historico: list[dict], chave:
     return None
 
 
-def aplicar_sugestao_classificacao(item: ItemImportacao, contexto: dict) -> None:
-    _sugerir_categoria(item, contexto.get("regras", []))
-    if item.status != ItemImportacao.Status.NOVO or item.acao != ItemImportacao.Acao.CRIAR:
+def aplicar_sugestao_classificacao(
+    item: ItemImportacao,
+    contexto: dict,
+    *,
+    campos_protegidos=None,
+) -> None:
+    if (
+        item.status != ItemImportacao.Status.NOVO
+        or item.acao != ItemImportacao.Acao.CRIAR
+        or item.revisado_em is not None
+        or item.natureza in NATUREZAS_FORA_DO_MOTOR
+    ):
         return
+    protegidos = set(campos_protegidos or ())
+    if getattr(item, "_categoria_informada", False):
+        protegidos.add("categoria")
+    if getattr(item, "_pessoa_informada", False):
+        protegidos.add("pessoa")
+    if getattr(item, "_ambito_informado", False):
+        protegidos.add("ambito")
+
+    resultado = avaliar_e_aplicar_regra(
+        item,
+        contexto["regras_categoria"],
+        campos_protegidos=protegidos,
+    )
+    if resultado.regra and resultado.campos_aplicados:
+        if resultado.regra.versao_motor == RegraCategoria.VersaoMotor.LEGADO:
+            motivo = f'Classificação sugerida pela regra legada “{resultado.regra.nome}”.'
+        else:
+            motivo = f'Classificação sugerida pela regra “{resultado.regra.nome}”.'
+        _adicionar_motivo(item, motivo)
+
     historico = contexto.get("historico", [])
     if item.categoria_id is None:
         categoria_id = _sugerir_valor_historico(item, historico, "categorias")
         if categoria_id:
             item.categoria_id = categoria_id
             _adicionar_motivo(item, "Categoria sugerida pelo histórico recente.")
-    if not getattr(item, "_ambito_informado", False) and item.ambito in {None, "", Ambito.NAO_DEFINIDO}:
+    if "ambito" not in protegidos and item.ambito in {None, "", Ambito.NAO_DEFINIDO}:
         ambito = _sugerir_valor_historico(item, historico, "ambito")
         if ambito:
             item.ambito = ambito
             _adicionar_motivo(item, "Âmbito sugerido pelo histórico recente.")
+
+
+def aplicar_classificacao_primeira_revisao(
+    item: ItemImportacao,
+    *,
+    campos_protegidos=None,
+    contexto=None,
+) -> None:
+    if (
+        item.revisado_em is not None
+        or item.acao != ItemImportacao.Acao.CRIAR
+        or not item.data_final
+        or item.valor_final is None
+    ):
+        return
+    item.status = ItemImportacao.Status.NOVO
+    contexto = contexto or preparar_contexto_classificacao(item.importacao, [item])
+    aplicar_sugestao_classificacao(
+        item,
+        contexto,
+        campos_protegidos=campos_protegidos,
+    )
 
 
 def _conciliar_item(item: ItemImportacao) -> None:
@@ -792,19 +845,21 @@ def sugerir_vinculo_confiavel(item: ItemImportacao) -> None:
             item.parcela = destino
             item.evento = destino.compra.evento
             descricao = "parcela"
-        item.motivo_status = (
-            f"Sugestão automática: único {descricao} compatível por data e valor; confirme o vínculo na revisão."
+        _adicionar_motivo(
+            item,
+            f"Sugestão automática: único {descricao} compatível por data e valor; confirme o vínculo na revisão.",
         )
     elif candidatos:
         item.acao = ItemImportacao.Acao.VINCULAR
         item.status = ItemImportacao.Status.PENDENTE
-        item.motivo_status = (
-            f"Há {len(candidatos)} destinos compatíveis por data e valor; selecione o vínculo correto na revisão."
+        _adicionar_motivo(
+            item,
+            f"Há {len(candidatos)} destinos compatíveis por data e valor; selecione o vínculo correto na revisão.",
         )
     else:
         item.acao = ItemImportacao.Acao.CRIAR
         item.status = ItemImportacao.Status.NOVO
-        item.motivo_status = MOTIVO_CRIAR_SEM_CANDIDATO
+        _adicionar_motivo(item, MOTIVO_CRIAR_SEM_CANDIDATO)
 
 
 def _conciliar_evento_pagamento(item: ItemImportacao) -> bool:
@@ -909,6 +964,7 @@ def selecionar_vinculo_item(
     titulos_ids=None,
     movimento_id=None,
     parcela_id=None,
+    remover_vinculo=False,
 ) -> ItemImportacao:
     titulos_ids = [int(titulo_id) for titulo_id in (titulos_ids or [])]
     if item.importacao.usuario_id != usuario.id:
@@ -925,6 +981,19 @@ def selecionar_vinculo_item(
         ):
             return item
         raise ValidationError("O item já está conciliado e seu destino não pode ser alterado.")
+
+    if remover_vinculo:
+        if any((titulo_id, titulos_ids, movimento_id, parcela_id)):
+            raise ValidationError("Remova o destino selecionado antes de confirmar a remoção do vínculo.")
+        item.titulo_alvo = None
+        item.movimento_conta = None
+        item.evento = None
+        item.parcela = None
+        item._titulos_multiplos_ids = []
+        item._remover_vinculo = True
+        item.status = ItemImportacao.Status.PENDENTE
+        item.motivo_status = "Vínculo removido; selecione outro destino ou altere a ação."
+        return item
 
     if item.acao != ItemImportacao.Acao.VINCULAR:
         item.titulo_alvo = None
@@ -1002,6 +1071,10 @@ def selecionar_vinculo_item(
 
 
 def atualizar_status_revisao(item: ItemImportacao) -> None:
+    if getattr(item, "_remover_vinculo", False):
+        item.status = ItemImportacao.Status.PENDENTE
+        item.revisado_em = timezone.now()
+        return
     possui_titulos_multiplos = bool(getattr(item, "_titulos_multiplos_ids", [])) or item.titulos_multiplos.exists()
     if item.acao == ItemImportacao.Acao.VINCULAR and (
         item.evento_id or item.titulo_alvo_id or item.parcela_id or possui_titulos_multiplos
@@ -1011,7 +1084,7 @@ def atualizar_status_revisao(item: ItemImportacao) -> None:
             item.motivo_status = "Divergência aceita e vinculada pelo usuário."
     elif item.acao == ItemImportacao.Acao.CRIAR and item.data_final and item.valor_final is not None:
         item.status = ItemImportacao.Status.NOVO
-        item.motivo_status = "Revisado pelo usuário."
+        _adicionar_motivo(item, "Revisado pelo usuário.")
     item.revisado_em = timezone.now()
 
 
@@ -1057,11 +1130,28 @@ def aplicar_alteracoes_lote(importacao_id: int, usuario, dados: dict, itens_sele
         raise ValidationError("Itens já conciliados não podem ser alterados para Criar lançamento.")
 
     campos = ("categoria", "pessoa", "ambito", "acao", "observacao")
+    contexto_classificacao = preparar_contexto_classificacao(importacao, itens)
     for item in itens:
+        acao_anterior = item.acao
+        status_anterior = item.status
         for campo in campos:
             valor = dados.get(campo)
             if valor not in (None, ""):
                 setattr(item, campo, valor)
+        if (
+            item.acao == ItemImportacao.Acao.CRIAR
+            and (acao_anterior != ItemImportacao.Acao.CRIAR or status_anterior != ItemImportacao.Status.NOVO)
+        ):
+            protegidos = {
+                campo
+                for campo in ("categoria", "pessoa", "ambito")
+                if dados.get(campo) not in (None, "", Ambito.NAO_DEFINIDO)
+            }
+            aplicar_classificacao_primeira_revisao(
+                item,
+                campos_protegidos=protegidos,
+                contexto=contexto_classificacao,
+            )
         atualizar_status_revisao(item)
         item.save(
             update_fields=[
@@ -1155,13 +1245,19 @@ def confirmar_importacao(importacao_id: int, usuario) -> Importacao:
                 _validar_parcela_alvo(item, parcela)
             if item.status != ItemImportacao.Status.NOVO:
                 continue
+            if item.natureza == NaturezaEvento.PAGAMENTO_FATURA:
+                _confirmar_item_cartao(item)
+                item.status = ItemImportacao.STATUS_PLANEJADO
+                _adicionar_motivo(item, "Pagamento de fatura registrado a partir da planilha.")
+                item.save(update_fields=["status", "evento", "evidencia_liquidacao", "motivo_status", "atualizado_em"])
+                continue
             from financeiro.services.importacao_planilha import criar_compra_planejada
 
             compra, parcela = criar_compra_planejada(item)
             item.evento = compra.evento
             item.parcela = parcela
             item.status = ItemImportacao.STATUS_PLANEJADO
-            item.motivo_status = "Compra futura criada a partir da planilha."
+            _adicionar_motivo(item, "Compra futura criada a partir da planilha.")
             faturas_afetadas.update(compra.parcelas.values_list("fatura_id", flat=True))
             item.save(update_fields=["status", "evento", "parcela", "motivo_status", "atualizado_em"])
             continue

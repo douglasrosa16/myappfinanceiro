@@ -26,6 +26,7 @@ from financeiro.models import (
     ParcelaCartao,
     RateioCategoria,
     RegraCategoria,
+    RegraCategoriaCondicao,
     Situacao,
     Titulo,
     VinculoTituloImportacao,
@@ -259,6 +260,8 @@ class ImportacaoServiceTests(TestCase):
         RegraCategoria.objects.create(
             usuario=self.usuario,
             texto="Mercado Central",
+            nome="Mercado Central (legada)",
+            versao_motor=RegraCategoria.VersaoMotor.LEGADO,
             categoria=categoria_regra,
             ambito=Ambito.PROFISSIONAL,
         )
@@ -268,6 +271,70 @@ class ImportacaoServiceTests(TestCase):
 
         self.assertEqual(item.categoria_id, categoria_regra.pk)
         self.assertEqual(item.ambito, Ambito.PROFISSIONAL)
+
+    def test_regra_nova_e_aplicada_somente_depois_da_conciliacao(self):
+        categoria = Categoria.objects.create(usuario=self.usuario, nome="Compras categorizadas")
+        regra = RegraCategoria.objects.create(
+            usuario=self.usuario,
+            nome="Mercado como receita",
+            prioridade=1,
+            categoria=categoria,
+            ambito=Ambito.PROFISSIONAL,
+            natureza_sugerida=NaturezaEvento.RECEITA,
+        )
+        RegraCategoriaCondicao.objects.create(
+            regra=regra,
+            ordem=1,
+            campo=RegraCategoriaCondicao.Campo.DESCRICAO,
+            operador=RegraCategoriaCondicao.Operador.CONTEM,
+            valor="MERCADO CENTRAL",
+        )
+
+        lote = self.criar_lote(OFXParser.parse(OFX_CONTA))
+        item = lote.itens.get(posicao=1)
+
+        self.assertEqual(item.status, ItemImportacao.Status.NOVO)
+        self.assertEqual(item.acao, ItemImportacao.Acao.CRIAR)
+        self.assertEqual(item.categoria, categoria)
+        self.assertEqual(item.ambito, Ambito.PROFISSIONAL)
+        self.assertEqual(item.natureza, NaturezaEvento.RECEITA)
+        self.assertIn("Mercado como receita", item.motivo_status)
+
+        confirmar_importacao(lote.pk, self.usuario)
+        item.refresh_from_db()
+        self.assertIn("Mercado como receita", item.motivo_status)
+
+    def test_regra_nova_nao_altera_item_pre_vinculado(self):
+        documento = OFXParser.parse(OFX_CONTA)
+        registro = documento.transacoes[0]
+        categoria = Categoria.objects.create(usuario=self.usuario, nome="Não aplicar no vínculo")
+        regra = RegraCategoria.objects.create(
+            usuario=self.usuario,
+            nome="Regra que seria aplicável",
+            prioridade=1,
+            categoria=categoria,
+        )
+        RegraCategoriaCondicao.objects.create(
+            regra=regra,
+            ordem=1,
+            campo=RegraCategoriaCondicao.Campo.DESCRICAO,
+            operador=RegraCategoriaCondicao.Operador.CONTEM,
+            valor="MERCADO",
+        )
+        tipo = Titulo.Tipo.RECEBER if registro.valor > 0 else Titulo.Tipo.PAGAR
+        self.criar_titulo_previsto(
+            abs(registro.valor),
+            registro.data,
+            tipo=tipo,
+        )
+
+        lote = self.criar_lote(documento)
+        item = lote.itens.get(posicao=1)
+
+        self.assertEqual(item.acao, ItemImportacao.Acao.VINCULAR)
+        self.assertEqual(item.status, ItemImportacao.Status.PENDENTE)
+        self.assertIsNone(item.categoria)
+        self.assertNotIn("Regra que seria aplicável", item.motivo_status)
 
     def test_conta_preseleciona_movimento_exato_e_permite_criar(self):
         documento = OFXParser.parse(OFX_CONTA)
@@ -1152,6 +1219,118 @@ class ImportacaoViewSecurityTests(TestCase):
         self.assertIsNotNone(item.revisado_em)
         self.assertTrue(resposta.json()["item"]["revisado"])
 
+    def test_troca_para_criar_aplica_regra_sem_substituir_natureza_revisada(self):
+        categoria = Categoria.objects.create(usuario=self.dono, nome="Transporte")
+        regra = RegraCategoria.objects.create(
+            usuario=self.dono,
+            nome="Aplicativos de transporte",
+            prioridade=1,
+            categoria=categoria,
+            ambito=Ambito.PROFISSIONAL,
+            natureza_sugerida=NaturezaEvento.RECEITA,
+        )
+        RegraCategoriaCondicao.objects.create(
+            regra=regra,
+            ordem=1,
+            campo=RegraCategoriaCondicao.Campo.DESCRICAO,
+            operador=RegraCategoriaCondicao.Operador.CONTEM,
+            valor="UBER",
+        )
+        item = ItemImportacao.objects.create(
+            importacao=self.lote,
+            posicao=1,
+            data=date(2026, 10, 20),
+            valor=Decimal("-25.00"),
+            descricao_original="UBER viagem",
+            natureza=NaturezaEvento.DESPESA,
+            ambito=Ambito.NAO_DEFINIDO,
+            acao=ItemImportacao.Acao.VINCULAR,
+            status=ItemImportacao.Status.PENDENTE,
+            motivo_status="Aguardando definição do usuário.",
+        )
+        self.client.force_login(self.dono)
+
+        resposta = self.client.post(
+            reverse("importacao_revisao", args=[self.lote.pk]),
+            {
+                "item_id": item.pk,
+                "data_revisada": "",
+                "valor_revisado": "",
+                "descricao_revisada": "",
+                "natureza": NaturezaEvento.DESPESA,
+                "categoria": "",
+                "pessoa": "",
+                "ambito": Ambito.NAO_DEFINIDO,
+                "acao": ItemImportacao.Acao.CRIAR,
+                "observacao": "",
+                "titulo_alvo_id": "",
+                "titulos_alvo_ids": "",
+                "movimento_alvo_id": "",
+                "parcela_alvo_id": "",
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+            HTTP_ACCEPT="application/json",
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        item.refresh_from_db()
+        self.assertEqual(item.categoria, categoria)
+        self.assertEqual(item.ambito, Ambito.PROFISSIONAL)
+        self.assertEqual(item.natureza, NaturezaEvento.DESPESA)
+        self.assertIn("Aplicativos de transporte", item.motivo_status)
+        self.assertIn("Revisado pelo usuário", item.motivo_status)
+        self.assertEqual(resposta.json()["item"]["categoria"], categoria.pk)
+
+    def test_aplicacao_em_lote_para_criar_executa_regra(self):
+        categoria = Categoria.objects.create(usuario=self.dono, nome="Assinaturas")
+        regra = RegraCategoria.objects.create(
+            usuario=self.dono,
+            nome="Streaming em lote",
+            prioridade=1,
+            categoria=categoria,
+        )
+        RegraCategoriaCondicao.objects.create(
+            regra=regra,
+            ordem=1,
+            campo=RegraCategoriaCondicao.Campo.DESCRICAO,
+            operador=RegraCategoriaCondicao.Operador.CONTEM,
+            valor="STREAMING",
+        )
+        item = ItemImportacao.objects.create(
+            importacao=self.lote,
+            posicao=1,
+            data=date(2026, 10, 20),
+            valor=Decimal("-49.90"),
+            descricao_original="STREAMING mensal",
+            natureza=NaturezaEvento.DESPESA,
+            ambito=Ambito.NAO_DEFINIDO,
+            acao=ItemImportacao.Acao.VINCULAR,
+            status=ItemImportacao.Status.PENDENTE,
+        )
+        self.client.force_login(self.dono)
+
+        resposta = self.client.post(
+            reverse("importacao_aplicar_lote", args=[self.lote.pk]),
+            {
+                "categoria": "",
+                "pessoa": "",
+                "ambito": "",
+                "acao": ItemImportacao.Acao.CRIAR,
+                "observacao": "",
+                "somente_status": "SELECIONADOS",
+                "itens_selecionados": [item.pk],
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+            HTTP_ACCEPT="application/json",
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        item.refresh_from_db()
+        self.assertEqual(item.categoria, categoria)
+        self.assertEqual(item.status, ItemImportacao.Status.NOVO)
+        self.assertIn("Streaming em lote", item.motivo_status)
+        self.assertEqual(resposta.json()["items"][0]["categoria"], categoria.pk)
+
     def test_revisao_ajax_persiste_e_exibe_selecao_de_titulos_multiplos(self):
         item = ItemImportacao.objects.create(
             importacao=self.lote,
@@ -1215,6 +1394,35 @@ class ImportacaoViewSecurityTests(TestCase):
         self.assertContains(revisao, "3 títulos selecionados")
         self.assertContains(revisao, 'name="titulos_alvo_ids"', html=False)
         self.assertContains(revisao, 'data-item-value="9042.00"', html=False)
+
+        remocao = self.client.post(
+            reverse("importacao_revisao", args=[self.lote.pk]),
+            {
+                "item_id": item.pk,
+                "data_revisada": "",
+                "valor_revisado": "",
+                "descricao_revisada": "",
+                "natureza": NaturezaEvento.RECEITA,
+                "categoria": "",
+                "pessoa": "",
+                "ambito": Ambito.NAO_DEFINIDO,
+                "acao": ItemImportacao.Acao.VINCULAR,
+                "observacao": "",
+                "titulo_alvo_id": "",
+                "titulos_alvo_ids": "",
+                "movimento_alvo_id": "",
+                "parcela_alvo_id": "",
+                "remover_vinculo": "1",
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+            HTTP_ACCEPT="application/json",
+        )
+
+        self.assertEqual(remocao.status_code, 200)
+        item.refresh_from_db()
+        self.assertEqual(item.status, ItemImportacao.Status.PENDENTE)
+        self.assertEqual(VinculoTituloImportacao.objects.filter(item=item).count(), 0)
+        self.assertIsNone(item.titulo_alvo_id)
 
     def test_salvar_individual_permite_alterar_item_ja_revisado(self):
         item = ItemImportacao.objects.create(

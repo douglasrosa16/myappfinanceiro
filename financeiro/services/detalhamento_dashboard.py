@@ -7,7 +7,7 @@ from urllib.parse import urlencode
 
 from django.urls import reverse
 
-from financeiro.models import Categoria, NaturezaEvento
+from financeiro.models import Ambito, Categoria, NaturezaEvento
 from financeiro.services.dashboard import (
     ContribuicaoAnalitica,
     _categoria_superior,
@@ -68,8 +68,16 @@ def _contribuicao_compativel(
     contribuicao: ContribuicaoAnalitica,
     indicador: dict,
     categorias: dict[int, Categoria],
+    ambito: str = "all",
 ) -> bool:
     if contribuicao.natureza_evento not in {NaturezaEvento.DESPESA, NaturezaEvento.ESTORNO}:
+        return False
+    ambito_contribuicao = (
+        contribuicao.registro.evento.ambito
+        if contribuicao.origem == "CONTA"
+        else contribuicao.registro.ambito_exibicao
+    )
+    if ambito != "all" and ambito_contribuicao != ambito:
         return False
 
     categoria = contribuicao.categoria
@@ -112,7 +120,7 @@ def _linha_detalhamento(contribuicoes: list[ContribuicaoAnalitica]) -> LinhaLanc
     )
 
 
-def _url_lancamentos(dados: dict, indicador: dict) -> str:
+def _url_lancamentos(dados: dict, indicador: dict, ambito: str = "all") -> str:
     filtros = dados["filtros"]
     parametros = {
         "date_from": dados["data_inicial"].strftime("%d/%m/%Y"),
@@ -124,6 +132,8 @@ def _url_lancamentos(dados: dict, indicador: dict) -> str:
         "analysis_value": indicador["valor"],
         "analysis_nature": dados["natureza"],
     }
+    if ambito != "all":
+        parametros["analysis_scope"] = ambito
     if indicador["tipo"] == "essentiality":
         parametros["essentiality"] = indicador["valor"]
         parametros["computes"] = "COMPUTA"
@@ -147,9 +157,11 @@ def consultar_detalhamento_dashboard(
     cartao_id=None,
     origem="all",
     natureza="all",
+    scope="all",
     date_from=None,
     date_to=None,
 ) -> dict:
+    scope = scope if scope in Ambito.values else "all"
     dados = carregar_contribuicoes_dashboard(
         usuario,
         periodo=periodo,
@@ -163,7 +175,7 @@ def consultar_detalhamento_dashboard(
     indicador = _resolver_indicador(str(tipo or ""), str(valor or ""), dados["categorias"])
     agrupadas = defaultdict(list)
     for contribuicao in dados["contribuicoes"]:
-        if _contribuicao_compativel(contribuicao, indicador, dados["categorias"]):
+        if _contribuicao_compativel(contribuicao, indicador, dados["categorias"], scope):
             agrupadas[(contribuicao.origem, contribuicao.registro.pk)].append(contribuicao)
 
     linhas = [
@@ -178,10 +190,11 @@ def consultar_detalhamento_dashboard(
         "analysis_type": indicador["tipo"],
         "analysis_value": indicador["valor"],
         "analysis_nature": dados["natureza"],
+        "analysis_scope": scope,
         "linhas": linhas,
         "total_registros": len(linhas),
         "total_indicador": total,
         "data_inicial": dados["data_inicial"],
         "data_final": dados["data_final"],
-        "lancamentos_url": _url_lancamentos(dados, indicador),
+        "lancamentos_url": _url_lancamentos(dados, indicador, scope),
     }

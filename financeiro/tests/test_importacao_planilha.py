@@ -18,7 +18,9 @@ from financeiro.models import (
     ItemImportacao,
     NaturezaEvento,
     ParcelaCartao,
+    Pessoa,
     RegraCategoria,
+    RegraCategoriaCondicao,
     Situacao,
 )
 from financeiro.ofx import OFXParser
@@ -29,6 +31,7 @@ from financeiro.services.importacao_ofx import (
     selecionar_vinculo_item,
 )
 from financeiro.services.importacao_planilha import ler_compras_planilha
+from financeiro.services.cartoes_faturas import calcular_totais_parcelas
 
 
 def csv_upload(nome="compras.csv", conteudo=None):
@@ -39,14 +42,14 @@ def csv_upload(nome="compras.csv", conteudo=None):
     return SimpleUploadedFile(nome, conteudo.encode("utf-8"), content_type="text/csv")
 
 
-def xlsx_upload():
+def xlsx_upload(valor=120.00):
     from openpyxl import Workbook
 
     arquivo = BytesIO()
     workbook = Workbook()
     planilha = workbook.active
     planilha.append(["descricao", "data_compra", "valor_total", "quantidade_parcelas", "categoria", "pessoa", "ambito", "observacao"])
-    planilha.append(["Compra parcelada", date(2026, 10, 20), 120.00, 3, "", "", "PESSOAL", "planilha"])
+    planilha.append(["Compra parcelada", date(2026, 10, 20), valor, 3, "", "", "PESSOAL", "planilha"])
     workbook.save(arquivo)
     return SimpleUploadedFile("compras.xlsx", arquivo.getvalue(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
@@ -254,11 +257,141 @@ class ImportacaoPlanilhaTests(TestCase):
         self.assertEqual(item.categoria_id, categoria_informada.pk)
         self.assertEqual(item.ambito, Ambito.PROFISSIONAL)
 
+    def test_planilha_preserva_campos_explicitos_e_regra_pode_sugerir_tipo(self):
+        categoria_informada = Categoria.objects.create(
+            usuario=self.usuario,
+            nome="Serviços informados",
+            tipo=Categoria.Tipo.DESPESA,
+        )
+        categoria_regra = Categoria.objects.create(
+            usuario=self.usuario,
+            nome="Categoria da regra",
+            tipo=Categoria.Tipo.DESPESA,
+        )
+        pessoa_informada = Pessoa.objects.create(usuario=self.usuario, nome="Pessoa informada")
+        pessoa_regra = Pessoa.objects.create(usuario=self.usuario, nome="Pessoa da regra")
+        regra = RegraCategoria.objects.create(
+            usuario=self.usuario,
+            nome="Streaming com tipo",
+            prioridade=1,
+            categoria=categoria_regra,
+            pessoa=pessoa_regra,
+            ambito=Ambito.PESSOAL,
+            natureza_sugerida=NaturezaEvento.ESTORNO,
+        )
+        RegraCategoriaCondicao.objects.create(
+            regra=regra,
+            ordem=1,
+            campo=RegraCategoriaCondicao.Campo.DESCRICAO,
+            operador=RegraCategoriaCondicao.Operador.CONTEM,
+            valor="STREAMING",
+        )
+
+        lote = self.criar_lote_planilha(
+            csv_upload(
+                conteudo=(
+                    "descricao;data_compra;valor_total;quantidade_parcelas;categoria;pessoa;ambito;observacao\n"
+                    f"Assinatura Streaming;15/10/2026;49,90;1;{categoria_informada.nome};{pessoa_informada.nome};PROFISSIONAL;mensal\n"
+                )
+            )
+        )
+        item = lote.itens.get()
+
+        self.assertEqual(item.categoria, categoria_informada)
+        self.assertEqual(item.pessoa, pessoa_informada)
+        self.assertEqual(item.ambito, Ambito.PROFISSIONAL)
+        self.assertEqual(item.natureza, NaturezaEvento.ESTORNO)
+        self.assertIn("Streaming com tipo", item.motivo_status)
+
     def test_xlsx_e_valor_brasileiro_sao_lidos(self):
         compras = ler_compras_planilha(xlsx_upload(), self.usuario)
         self.assertEqual(compras[0]["valor_total"], Decimal("120.00"))
         self.assertEqual(compras[0]["quantidade_parcelas"], 3)
         self.assertEqual(compras[0]["data_compra"], date(2026, 10, 20))
+
+    def test_xlsx_aceita_valor_negativo(self):
+        compras = ler_compras_planilha(xlsx_upload(-120.00), self.usuario)
+
+        self.assertEqual(compras[0]["valor_total"], Decimal("-120.00"))
+
+    def test_planilha_aceita_estorno_e_pagamento_de_fatura_negativos(self):
+        regra = RegraCategoria.objects.create(
+            usuario=self.usuario,
+            nome="Não aplicar em pagamento",
+            prioridade=1,
+            categoria=self.categoria,
+            natureza_sugerida=NaturezaEvento.RECEITA,
+        )
+        RegraCategoriaCondicao.objects.create(
+            regra=regra,
+            ordem=1,
+            campo=RegraCategoriaCondicao.Campo.DESCRICAO,
+            operador=RegraCategoriaCondicao.Operador.CONTEM,
+            valor="PAGAMENTO",
+        )
+        lote = self.criar_lote_planilha(
+            csv_upload(
+                conteudo=(
+                    "descricao;data_compra;valor_total;quantidade_parcelas;categoria;pessoa;ambito;observacao\n"
+                    "PAGAMENTO DEBITO EM CONTA*;13/10/2026;-8538,19;1;;;PESSOAL;pagamento\n"
+                    "Estorno da compra;17/10/2026;-132,82;1;;;PESSOAL;credito\n"
+                    "Compra normal;18/10/2026;100,00;1;;;PESSOAL;compra\n"
+                )
+            )
+        )
+        pagamento = lote.itens.get(descricao_original__startswith="PAGAMENTO")
+        estorno = lote.itens.get(descricao_original="Estorno da compra")
+        despesa = lote.itens.get(descricao_original="Compra normal")
+
+        self.assertEqual(pagamento.valor, Decimal("-8538.19"))
+        self.assertEqual(pagamento.natureza, NaturezaEvento.PAGAMENTO_FATURA)
+        self.assertIsNone(pagamento.categoria)
+        self.assertNotIn("Não aplicar em pagamento", pagamento.motivo_status)
+        self.assertEqual(estorno.valor, Decimal("-132.82"))
+        self.assertEqual(estorno.natureza, NaturezaEvento.ESTORNO)
+        self.assertEqual(despesa.natureza, NaturezaEvento.DESPESA)
+        self.assertEqual(lote.total_debitos, Decimal("100.00"))
+        self.assertEqual(lote.total_creditos, Decimal("8671.01"))
+        self.assertEqual(lote.total_liquido, Decimal("8571.01"))
+        self.assertEqual(
+            buscar_candidatos_vinculo(pagamento, self.usuario, tipo="PARCELA", escopo="TODOS")["total"],
+            0,
+        )
+
+        self.confirmar_planejamento(lote)
+
+        pagamento.refresh_from_db()
+        self.assertIsNotNone(pagamento.evento_id)
+        self.assertIsNone(pagamento.parcela_id)
+        self.assertEqual(pagamento.evento.natureza, NaturezaEvento.PAGAMENTO_FATURA)
+        self.assertEqual(pagamento.evento.situacao, Situacao.REALIZADO)
+        self.assertEqual(CompraCartao.objects.count(), 2)
+
+        parcela_estorno = ParcelaCartao.objects.get(compra__evento__natureza=NaturezaEvento.ESTORNO)
+        self.assertEqual(parcela_estorno.valor, Decimal("132.82"))
+        self.assertEqual(parcela_estorno.natureza, NaturezaEvento.ESTORNO)
+        totais = calcular_totais_parcelas(parcela_estorno.fatura.parcelas.all())
+        self.assertEqual(totais["projetado"], Decimal("-32.82"))
+
+    def test_planilha_rejeita_valor_zero(self):
+        self.client.force_login(self.usuario)
+        resposta = self.client.post(
+            "/importar/planilha/",
+            {
+                "cartao": self.cartao.pk,
+                "ciclo": "11/2026",
+                "arquivo_planilha": csv_upload(
+                    conteudo=(
+                        "descricao;data_compra;valor_total;quantidade_parcelas\n"
+                        "Compra sem valor;15/10/2026;0,00;1\n"
+                    )
+                ),
+            },
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "valor_total deve ser diferente de zero", html=False)
+        self.assertFalse(Importacao.objects.exists())
 
     def test_categoria_inexistente_rejeita_planilha(self):
         self.client.force_login(self.usuario)

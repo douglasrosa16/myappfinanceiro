@@ -30,6 +30,19 @@ class PessoaAdmin(admin.ModelAdmin):
     search_fields = ("nome", "documento")
 
 
+class RegraCategoriaCondicaoInline(admin.TabularInline):
+    model = models.RegraCategoriaCondicao
+    extra = 0
+
+
+@admin.register(models.RegraCategoria)
+class RegraCategoriaAdmin(admin.ModelAdmin):
+    list_display = ("nome", "usuario", "prioridade", "versao_motor", "ativa")
+    list_filter = ("versao_motor", "ativa", "combinador")
+    search_fields = ("nome", "texto", "usuario__username")
+    inlines = (RegraCategoriaCondicaoInline,)
+
+
 admin.site.register(models.Fatura)
 admin.site.register(models.EventoFinanceiro)
 admin.site.register(models.RateioCategoria)
@@ -40,5 +53,4 @@ admin.site.register(models.Titulo)
 admin.site.register(models.Liquidacao)
 admin.site.register(models.Importacao)
 admin.site.register(models.ItemImportacao)
-admin.site.register(models.RegraCategoria)
 admin.site.register(models.Orcamento)

@@ -1,0 +1,53 @@
+{% extends "financeiro/base.html" %}
+{% block title %}{{ titulo }} | My App Financeiro{% endblock %}
+{% block content %}
+<header class="top">
+  <div><div class="eyebrow">Automação</div><h1>{{ titulo }}</h1></div>
+</header>
+<section class="panel" data-modal-content>
+  <form method="post" class="form-grid rule-form" action="{{ request.get_full_path }}" data-regra-categoria-form>
+    {% csrf_token %}
+    {% if regra.pk and regra.versao_motor == "LEGADO" %}
+      <div class="form-note wide">Esta é uma regra de compatibilidade, usada somente quando nenhuma regra nova corresponder. Nome e resultados compatíveis podem ser ajustados sem promovê-la. Condições adicionais, OU ou sugestão de tipo a transformarão em uma regra nova prioritária.</div>
+    {% endif %}
+
+    <p class="field wide rule-name-field">{{ form.nome.label_tag }}{{ form.nome.errors }}{{ form.nome }}</p>
+    <div class="rule-settings wide">
+      <p class="field">{{ form.combinador.label_tag }}{{ form.combinador.errors }}{{ form.combinador }}</p>
+      <p class="field">{{ form.prioridade.label_tag }}{{ form.prioridade.errors }}{{ form.prioridade }}{% if form.prioridade.help_text %}<span class="field-help">{{ form.prioridade.help_text }}</span>{% endif %}</p>
+      <p class="field rule-active-field">{{ form.ativa.label_tag }}{{ form.ativa.errors }}{{ form.ativa }}</p>
+    </div>
+
+    <fieldset class="rule-builder wide">
+      <legend>Condições</legend>
+      <p class="small">Defina até 20 condições. Valor é sempre comparado pelo valor absoluto.</p>
+      {{ formset.management_form }}
+      {% if formset.non_form_errors %}<div class="form-error">{{ formset.non_form_errors }}</div>{% endif %}
+      <div class="rule-condition-list" data-condition-list>
+        {% for condicao in formset.forms %}
+          {% include "financeiro/_regra_categoria_condicao.html" with condicao=condicao %}
+        {% endfor %}
+      </div>
+      <button class="link-button" type="button" data-condition-add>+ Adicionar condição</button>
+      <template data-condition-template>{% include "financeiro/_regra_categoria_condicao.html" with condicao=formset.empty_form %}</template>
+    </fieldset>
+
+    <fieldset class="rule-results wide">
+      <legend>Resultados sugeridos</legend>
+      <p class="small">Informe pelo menos um resultado. “Não definido” em regra legada é preservado, mas não conta como nova sugestão.</p>
+      <div class="rule-results-grid">
+        <p class="field">{{ form.categoria.label_tag }}{{ form.categoria.errors }}{{ form.categoria }}</p>
+        <p class="field">{{ form.ambito.label_tag }}{{ form.ambito.errors }}{{ form.ambito }}</p>
+        <p class="field">{{ form.pessoa.label_tag }}{{ form.pessoa.errors }}{{ form.pessoa }}</p>
+        <p class="field">{{ form.natureza_sugerida.label_tag }}{{ form.natureza_sugerida.errors }}{{ form.natureza_sugerida }}</p>
+      </div>
+    </fieldset>
+
+    {% if form.non_field_errors %}<div class="form-error wide">{{ form.non_field_errors }}</div>{% endif %}
+    <div class="actions wide">
+      <button class="button secondary" type="button" data-close-dialog>Cancelar</button>
+      <button class="button" type="submit">Salvar regra</button>
+    </div>
+  </form>
+</section>
+{% endblock %}

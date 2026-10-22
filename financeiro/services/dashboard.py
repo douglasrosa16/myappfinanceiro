@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import unicodedata
 from urllib.parse import urlencode
 
-from django.db.models import Q, Sum
+from django.db.models import Exists, OuterRef, Q, Sum
 from django.utils import timezone
 
 from financeiro.models import (
@@ -17,6 +17,7 @@ from financeiro.models import (
     Conta,
     EventoFinanceiro,
     Fatura,
+    Liquidacao,
     MovimentoConta,
     NaturezaEvento,
     ParcelaCartao,
@@ -748,6 +749,35 @@ def _compromissos_futuros(usuario, contas: list[Conta]) -> dict:
     }
 
 
+def _faturas_fechadas_sem_baixa(usuario, cartoes: list[Cartao], ciclo: str) -> Decimal:
+    """Soma faturas fechadas do ciclo que ainda não receberam baixa em conta."""
+    cartoes_ids = [cartao.pk for cartao in cartoes]
+    if not cartoes_ids:
+        return ZERO
+    baixas_confirmadas = Liquidacao.objects.filter(
+        titulo_id=OuterRef("pk"),
+        status=Liquidacao.Status.ATIVA,
+        movimento_conta__isnull=False,
+    )
+    return (
+        Titulo.objects.filter(
+            usuario=usuario,
+            tipo=Titulo.Tipo.PAGAR,
+            ativo=True,
+            status=Titulo.Status.ABERTO,
+            saldo_aberto__gt=ZERO,
+            fatura__usuario=usuario,
+            fatura__cartao_id__in=cartoes_ids,
+            fatura__ciclo=ciclo,
+            fatura__status=Fatura.Status.FECHADA,
+        )
+        .annotate(tem_baixa_confirmada=Exists(baixas_confirmadas))
+        .filter(tem_baixa_confirmada=False)
+        .aggregate(total=Sum("saldo_aberto", default=ZERO))["total"]
+        or ZERO
+    )
+
+
 def _posicao_contas(usuario, contas: list[Conta], hoje: date, fim_previsao: date) -> list[dict]:
     """Monta saldos por conta sem misturar fluxo efetivo e previsões."""
     if not contas:
@@ -1072,6 +1102,11 @@ def consultar_dashboard(
     despesas_anteriores = _despesas_liquidas(analise_anterior)
     resultado = analise_atual["receitas"] - despesas_atuais
     compromissos = _compromissos_futuros(usuario, contas_filtradas)
+    fatura_projetada_compromissos = _faturas_fechadas_sem_baixa(
+        usuario,
+        filtros["cartoes_filtrados"],
+        periodo_referencia,
+    )
     hoje = timezone.localdate()
     posicao_contas = _posicao_contas(usuario, contas_filtradas, hoje, fim_exclusivo)
     limites_cartoes = _limites_cartoes(usuario, filtros["cartoes_filtrados"], hoje.strftime("%Y-%m"))
@@ -1158,7 +1193,7 @@ def consultar_dashboard(
             **compromissos,
             "fatura_atual": fatura,
             "fatura_confirmada": fatura_confirmada,
-            "fatura_projetada": fatura,
+            "fatura_projetada": fatura_projetada_compromissos,
         },
         "debitos_previstos": previstos_legados["itens"],
         "total_debitos_previstos": previstos_legados["total"],

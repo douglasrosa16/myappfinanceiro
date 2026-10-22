@@ -5,6 +5,7 @@ import re
 from uuid import uuid4
 
 from django import forms
+from django.forms import BaseInlineFormSet, inlineformset_factory
 from django.db import models
 from django.db.models import Q
 
@@ -17,8 +18,11 @@ from .models import (
     Importacao,
     ItemImportacao,
     NaturezaEvento,
+    Orcamento,
     ParcelaCartao,
     Pessoa,
+    RegraCategoria,
+    RegraCategoriaCondicao,
     MovimentoConta,
     Titulo,
     Situacao,
@@ -237,10 +241,247 @@ class CategoriaForm(forms.ModelForm):
         return cleaned
 
 
+class OrcamentoForm(forms.ModelForm):
+    categoria = CategoriaModelChoiceField(queryset=Categoria.objects.none(), label="Categoria")
+    mes = CicloField(label="Mês")
+    limite = BRLDecimalField(label="Limite (R$)")
+
+    class Meta:
+        model = Orcamento
+        fields = ["categoria", "mes", "ambito", "limite"]
+        labels = {"ambito": "Âmbito"}
+
+    def __init__(self, *args, usuario=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.usuario = usuario
+        if usuario:
+            self.instance.usuario = usuario
+            categorias = Categoria.objects.filter(
+                usuario=usuario,
+                tipo=Categoria.Tipo.DESPESA,
+                ativa=True,
+                categoria_pai__isnull=True,
+            )
+            if self.instance.pk and self.instance.categoria_id:
+                categorias = Categoria.objects.filter(
+                    Q(
+                        usuario=usuario,
+                        tipo=Categoria.Tipo.DESPESA,
+                        ativa=True,
+                        categoria_pai__isnull=True,
+                    )
+                    | Q(pk=self.instance.categoria_id, usuario=usuario, categoria_pai__isnull=True)
+                )
+            self.fields["categoria"].queryset = categorias.select_related("categoria_pai").distinct()
+
+    def clean_mes(self):
+        mes = self.cleaned_data["mes"]
+        if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", mes or ""):
+            raise forms.ValidationError("Informe o mês no formato MM/AAAA.")
+        return mes
+
+    def clean(self):
+        cleaned = super().clean()
+        categoria = cleaned.get("categoria")
+        mes = cleaned.get("mes")
+        ambito = cleaned.get("ambito")
+        if categoria and self.usuario and categoria.usuario_id != self.usuario.pk:
+            self.add_error("categoria", "A categoria deve pertencer ao usuário atual.")
+        if categoria and categoria.tipo != Categoria.Tipo.DESPESA:
+            self.add_error("categoria", "Selecione uma categoria de despesa.")
+        if categoria and categoria.categoria_pai_id:
+            self.add_error("categoria", "Selecione uma categoria superior, sem categoria superior informada.")
+        if self.usuario and categoria and mes and ambito:
+            duplicado = Orcamento.objects.filter(
+                usuario=self.usuario,
+                categoria=categoria,
+                mes=mes,
+                ambito=ambito,
+            ).exclude(pk=self.instance.pk)
+            if duplicado.exists():
+                raise forms.ValidationError("Já existe um orçamento para esta categoria, mês e âmbito.")
+        return cleaned
+
+
 class PessoaForm(forms.ModelForm):
     class Meta:
         model = Pessoa
         fields = ["nome", "documento", "observacao", "ativa"]
+
+
+class RegraCategoriaForm(forms.ModelForm):
+    class Meta:
+        model = RegraCategoria
+        field_classes = {"categoria": CategoriaModelChoiceField}
+        fields = [
+            "nome",
+            "prioridade",
+            "combinador",
+            "categoria",
+            "ambito",
+            "pessoa",
+            "natureza_sugerida",
+            "ativa",
+        ]
+        labels = {
+            "prioridade": "Prioridade",
+            "combinador": "Combinação das condições",
+            "categoria": "Sugerir categoria",
+            "ambito": "Sugerir âmbito",
+            "pessoa": "Sugerir pessoa",
+            "natureza_sugerida": "Sugerir tipo",
+            "ativa": "Regra ativa",
+        }
+        help_texts = {
+            "prioridade": "Números menores são avaliados primeiro.",
+        }
+
+    def __init__(self, *args, usuario=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.usuario = usuario
+        if usuario:
+            self.instance.usuario = usuario
+            self.fields["categoria"].queryset = Categoria.objects.filter(usuario=usuario).select_related("categoria_pai")
+            self.fields["pessoa"].queryset = Pessoa.objects.filter(usuario=usuario)
+        ambitos = [("", "Não sugerir âmbito"), (Ambito.PESSOAL, "Pessoal"), (Ambito.PROFISSIONAL, "Profissional")]
+        if self.instance.pk and self.instance.ambito == Ambito.NAO_DEFINIDO:
+            ambitos.append((Ambito.NAO_DEFINIDO, "Não definido (legado)"))
+        self.fields["ambito"].choices = ambitos
+
+    def clean(self):
+        cleaned = super().clean()
+        ambito = cleaned.get("ambito")
+        if not any(
+            (
+                cleaned.get("categoria"),
+                cleaned.get("pessoa"),
+                cleaned.get("natureza_sugerida"),
+                ambito in {Ambito.PESSOAL, Ambito.PROFISSIONAL},
+            )
+        ):
+            raise forms.ValidationError("Informe ao menos um resultado sugerido para a regra.")
+        return cleaned
+
+
+class RegraCategoriaCondicaoForm(forms.ModelForm):
+    valor_texto = forms.CharField(
+        label="Valor",
+        required=False,
+        max_length=255,
+        widget=forms.TextInput(attrs={"placeholder": "Informe o valor da condição"}),
+    )
+    valor_natureza = forms.ChoiceField(
+        label="Tipo",
+        required=False,
+        choices=(("", "Selecione"), *RegraCategoria.NATUREZAS_SUGERIDAS),
+    )
+    valor_origem = forms.ChoiceField(
+        label="Origem",
+        required=False,
+        choices=(("", "Selecione"), ("CONTA", "Conta financeira"), ("CARTAO", "Cartão de crédito")),
+    )
+    valor_conta = forms.ModelChoiceField(label="Conta", required=False, queryset=Conta.objects.none())
+    valor_cartao = forms.ModelChoiceField(label="Cartão", required=False, queryset=Cartao.objects.none())
+
+    class Meta:
+        model = RegraCategoriaCondicao
+        fields = ["ordem", "campo", "operador", "valor"]
+        widgets = {
+            "ordem": forms.HiddenInput(),
+            "valor": forms.HiddenInput(),
+        }
+
+    def __init__(self, *args, usuario=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.usuario = usuario
+        self.fields["valor"].required = False
+        if usuario:
+            self.fields["valor_conta"].queryset = Conta.objects.filter(usuario=usuario).order_by("nome", "id")
+            self.fields["valor_cartao"].queryset = Cartao.objects.filter(usuario=usuario).order_by("nome", "id")
+        if self.instance.pk and not self.is_bound:
+            valor = self.instance.valor
+            if self.instance.campo in {
+                RegraCategoriaCondicao.Campo.DESCRICAO,
+                RegraCategoriaCondicao.Campo.OBSERVACAO,
+                RegraCategoriaCondicao.Campo.VALOR,
+            }:
+                self.fields["valor_texto"].initial = valor.replace(".", ",") if self.instance.campo == RegraCategoriaCondicao.Campo.VALOR else valor
+            elif self.instance.campo == RegraCategoriaCondicao.Campo.NATUREZA:
+                self.fields["valor_natureza"].initial = valor
+            elif self.instance.campo == RegraCategoriaCondicao.Campo.ORIGEM:
+                self.fields["valor_origem"].initial = valor
+            elif self.instance.campo == RegraCategoriaCondicao.Campo.CONTA and valor.isdigit():
+                self.fields["valor_conta"].initial = int(valor)
+            elif self.instance.campo == RegraCategoriaCondicao.Campo.CARTAO and valor.isdigit():
+                self.fields["valor_cartao"].initial = int(valor)
+
+    def _get_validation_exclusions(self):
+        exclusions = super()._get_validation_exclusions()
+        # A ordem é normalizada transacionalmente ao salvar o formset. Excluí-la
+        # aqui evita falsos conflitos da constraint durante uma reordenação.
+        exclusions.add("ordem")
+        return exclusions
+
+    def clean(self):
+        cleaned = super().clean()
+        campo = cleaned.get("campo")
+        operador = cleaned.get("operador")
+        if not campo or not operador:
+            return cleaned
+        if operador not in RegraCategoriaCondicao.operadores_permitidos(campo):
+            self.add_error("operador", "O operador não é compatível com o campo selecionado.")
+
+        valor = ""
+        if campo in {RegraCategoriaCondicao.Campo.DESCRICAO, RegraCategoriaCondicao.Campo.OBSERVACAO}:
+            valor = (cleaned.get("valor_texto") or "").strip()
+        elif campo == RegraCategoriaCondicao.Campo.VALOR:
+            bruto = (cleaned.get("valor_texto") or "").strip()
+            normalizado = bruto.replace(".", "").replace(",", ".") if "," in bruto else bruto
+            try:
+                valor = format(abs(Decimal(normalizado)), "f")
+            except (InvalidOperation, ValueError):
+                self.add_error("valor_texto", "Informe um valor monetário válido.")
+        elif campo == RegraCategoriaCondicao.Campo.NATUREZA:
+            valor = cleaned.get("valor_natureza") or ""
+        elif campo == RegraCategoriaCondicao.Campo.ORIGEM:
+            valor = cleaned.get("valor_origem") or ""
+        elif campo == RegraCategoriaCondicao.Campo.CONTA:
+            conta = cleaned.get("valor_conta")
+            valor = str(conta.pk) if conta else ""
+        elif campo == RegraCategoriaCondicao.Campo.CARTAO:
+            cartao = cleaned.get("valor_cartao")
+            valor = str(cartao.pk) if cartao else ""
+        if not valor:
+            self.add_error("valor", "Informe o valor da condição.")
+        cleaned["valor"] = valor
+        return cleaned
+
+
+class BaseRegraCategoriaCondicaoFormSet(BaseInlineFormSet):
+    def clean(self):
+        super().clean()
+        condicoes = [
+            form for form in self.forms
+            if form.cleaned_data and not form.cleaned_data.get("DELETE")
+        ]
+        if not condicoes:
+            raise forms.ValidationError("Adicione ao menos uma condição à regra.")
+        if any(self.errors):
+            return
+
+
+RegraCategoriaCondicaoFormSet = inlineformset_factory(
+    RegraCategoria,
+    RegraCategoriaCondicao,
+    form=RegraCategoriaCondicaoForm,
+    formset=BaseRegraCategoriaCondicaoFormSet,
+    extra=0,
+    min_num=1,
+    max_num=20,
+    validate_min=True,
+    validate_max=True,
+    can_delete=True,
+)
 
 
 class EventoFinanceiroForm(forms.ModelForm):
@@ -268,6 +509,31 @@ class EventoFinanceiroForm(forms.ModelForm):
         if natureza in {NaturezaEvento.DESPESA, NaturezaEvento.PAGAMENTO_FATURA} and valor and valor < 0:
             self.add_error("valor", "Informe despesas e pagamentos com valor positivo; o sinal fica no movimento de conta.")
         return cleaned
+
+
+class SugestaoRegraLancamentoForm(forms.Form):
+    descricao = forms.CharField(required=False, max_length=180)
+    observacao = forms.CharField(required=False, max_length=2000)
+    natureza = forms.ChoiceField(required=False, choices=(("", ""), *NaturezaEvento.choices))
+    valor = forms.CharField(required=False, max_length=64)
+    origem = forms.ChoiceField(required=False, choices=(("", ""), ("CONTA", "Conta"), ("CARTAO", "Cartão")))
+    conta = forms.ModelChoiceField(required=False, queryset=Conta.objects.none())
+    cartao = forms.ModelChoiceField(required=False, queryset=Cartao.objects.none())
+
+    def __init__(self, *args, usuario=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["conta"].queryset = Conta.objects.filter(usuario=usuario, ativa=True) if usuario else Conta.objects.none()
+        self.fields["cartao"].queryset = Cartao.objects.filter(usuario=usuario, ativo=True) if usuario else Cartao.objects.none()
+
+    def clean_valor(self):
+        bruto = (self.cleaned_data.get("valor") or "").strip()
+        if not bruto:
+            return None
+        normalizado = bruto.replace(".", "").replace(",", ".") if "," in bruto else bruto
+        try:
+            return abs(Decimal(normalizado))
+        except (InvalidOperation, TypeError, ValueError):
+            return None
 
 
 class LancamentoForm(forms.Form):
@@ -853,6 +1119,7 @@ class ItemImportacaoForm(forms.ModelForm):
     titulos_alvo_ids = forms.CharField(required=False, widget=forms.HiddenInput())
     movimento_alvo_id = forms.IntegerField(required=False, widget=forms.HiddenInput())
     parcela_alvo_id = forms.IntegerField(required=False, widget=forms.HiddenInput())
+    remover_vinculo = forms.BooleanField(required=False, widget=forms.HiddenInput())
 
     class Meta:
         model = ItemImportacao
@@ -889,6 +1156,7 @@ class ItemImportacaoForm(forms.ModelForm):
         titulos_ids_brutos = cleaned.get("titulos_alvo_ids") or ""
         movimento_id = cleaned.get("movimento_alvo_id")
         parcela_id = cleaned.get("parcela_alvo_id")
+        remover_vinculo = cleaned.get("remover_vinculo", False)
         try:
             titulos_ids = [int(valor) for valor in titulos_ids_brutos.split(",") if valor.strip()]
         except ValueError:
@@ -915,7 +1183,9 @@ class ItemImportacaoForm(forms.ModelForm):
             destinos = int(bool(titulo_id)) + int(bool(titulos_ids)) + int(bool(movimento_id)) + int(bool(parcela_id))
             if destinos > 1:
                 self.add_error("acao", "Selecione títulos ou somente um destino para o vínculo.")
-            elif not titulo_id and not titulos_ids and not movimento_id and not parcela_id and not possui_destino_existente:
+            elif remover_vinculo and destinos:
+                self.add_error("acao", "Remova o destino selecionado antes de confirmar a remoção do vínculo.")
+            elif not titulo_id and not titulos_ids and not movimento_id and not parcela_id and not remover_vinculo and not possui_destino_existente:
                 mensagem = (
                     "Selecione uma parcela prevista para vincular."
                     if self.instance.importacao.origem == Importacao.Origem.CARTAO

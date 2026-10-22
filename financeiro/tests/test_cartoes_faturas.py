@@ -130,6 +130,40 @@ class CartoesFaturasServiceTests(TestCase):
         dashboard = consultar_dashboard(self.usuario, periodo="2026-09", cartao_id=self.cartao.pk)
         self.assertEqual(dashboard["resumo"]["faturaProjetada"], consulta["totais"]["projetado"])
 
+    def test_itens_sao_ordenados_por_data_original_e_id_do_lancamento(self):
+        criar_compra_cartao(
+            self.usuario,
+            self.dados_compra(
+                descricao="Data posterior",
+                data_original=date(2026, 9, 12),
+                quantidade_parcelas=1,
+            ),
+        )
+        lancamento_id_menor = criar_compra_cartao(
+            self.usuario,
+            self.dados_compra(
+                descricao="Mesma data, ID menor",
+                data_original=date(2026, 9, 10),
+                quantidade_parcelas=1,
+            ),
+        ).evento_id
+        lancamento_id_maior = criar_compra_cartao(
+            self.usuario,
+            self.dados_compra(
+                descricao="Mesma data, ID maior",
+                data_original=date(2026, 9, 10),
+                quantidade_parcelas=1,
+            ),
+        ).evento_id
+
+        consulta = consultar_cartoes_faturas(self.usuario, ciclo="2026-09", cartao_id=self.cartao.pk)
+
+        self.assertLess(lancamento_id_menor, lancamento_id_maior)
+        self.assertEqual(
+            [item["descricao"] for item in consulta["itens"]],
+            ["Mesma data, ID menor", "Mesma data, ID maior", "Data posterior"],
+        )
+
     def test_aviso_de_ciclo_usa_mes_de_pagamento_e_parcela(self):
         self.cartao.dia_fechamento = 25
         self.cartao.save(update_fields=["dia_fechamento"])

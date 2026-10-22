@@ -5,7 +5,7 @@
   <div><div class="eyebrow">Formulario</div><h1>{{ titulo }}</h1></div>
 </header>
 <section class="panel" data-modal-content>
-  <form method="post" class="form-grid{% if formulario_lancamento %} lancamento-form{% endif %}{% if request.resolver_match.url_name == 'categoria_nova' or request.resolver_match.url_name == 'categoria_editar' %} categoria-form{% endif %}" enctype="multipart/form-data" action="{{ request.get_full_path }}"{% if formulario_lancamento %} data-lancamento-form{% endif %}{% if request.resolver_match.url_name == 'categoria_nova' or request.resolver_match.url_name == 'categoria_editar' %} data-categoria-form{% endif %}>
+  <form method="post" class="form-grid{% if formulario_lancamento %} lancamento-form{% endif %}{% if request.resolver_match.url_name == 'categoria_nova' or request.resolver_match.url_name == 'categoria_editar' %} categoria-form{% endif %}" enctype="multipart/form-data" action="{{ request.get_full_path }}"{% if formulario_lancamento %} data-lancamento-form{% endif %}{% if request.resolver_match.url_name == 'categoria_nova' or request.resolver_match.url_name == 'categoria_editar' %} data-categoria-form{% endif %}{% if sugestao_regra_url %} data-regra-sugestao-url="{{ sugestao_regra_url }}" data-sugestao-resultados-protegidos="{% if sugestao_resultados_protegidos %}true{% else %}false{% endif %}"{% endif %}>
     {% csrf_token %}
     {% for field in form %}
       {% if field.is_hidden %}
@@ -32,7 +32,7 @@
               </button>
               <input class="temporal-native" type="date" tabindex="-1" aria-hidden="true">
             </span>
-          {% elif field.name == "ciclo" %}
+          {% elif field.name == "ciclo" or field.name == "mes" %}
             <span class="temporal-control" data-temporal-control="month">
               {{ field }}
               <button type="button" data-open-temporal-picker aria-label="Abrir seletor de {{ field.label|lower }}">
@@ -49,6 +49,9 @@
     {% endfor %}
     {% if form.non_field_errors %}
       <div class="form-error wide">{{ form.non_field_errors }}</div>
+    {% endif %}
+    {% if sugestao_regra_url %}
+      <div class="form-note rule-suggestion-status wide" data-regra-sugestao-status role="status" aria-live="polite" hidden></div>
     {% endif %}
     {% if ciclo_aviso %}
       <div class="form-note wide">Atenção: {{ ciclo_aviso }}</div>

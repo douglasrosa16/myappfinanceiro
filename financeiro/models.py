@@ -4,6 +4,7 @@ from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.db.models import Q
 from django.utils.text import slugify
+from decimal import Decimal, InvalidOperation
 
 from .vencimentos_cartao import VencimentoCartaoInvalido, resolver_vencimento_fatura
 
@@ -792,12 +793,138 @@ class VinculoTituloImportacao(TimestampedModel):
 
 
 class RegraCategoria(TimestampedModel):
+    class Combinador(models.TextChoices):
+        TODAS = "TODAS", "Todas as condições (E)"
+        QUALQUER = "QUALQUER", "Qualquer condição (OU)"
+
+    class VersaoMotor(models.TextChoices):
+        LEGADO = "LEGADO", "Legada — compatibilidade"
+        NOVO = "NOVO", "Nova — em uso"
+
+    NATUREZAS_SUGERIDAS = (
+        (NaturezaEvento.DESPESA, "Despesa"),
+        (NaturezaEvento.RECEITA, "Receita"),
+        (NaturezaEvento.ESTORNO, "Estorno"),
+    )
+
     usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
-    texto = models.CharField(max_length=160)
+    texto = models.CharField(max_length=160, blank=True, default="")
+    nome = models.CharField(max_length=160)
+    prioridade = models.PositiveIntegerField(default=100)
+    combinador = models.CharField(max_length=20, choices=Combinador.choices, default=Combinador.TODAS)
+    versao_motor = models.CharField(max_length=20, choices=VersaoMotor.choices, default=VersaoMotor.NOVO)
     pessoa = models.ForeignKey(Pessoa, null=True, blank=True, on_delete=models.PROTECT)
-    categoria = models.ForeignKey(Categoria, on_delete=models.PROTECT)
-    ambito = models.CharField(max_length=20, choices=Ambito.choices, default=Ambito.NAO_DEFINIDO)
+    categoria = models.ForeignKey(Categoria, null=True, blank=True, on_delete=models.PROTECT)
+    ambito = models.CharField(max_length=20, choices=Ambito.choices, blank=True, default="")
+    natureza_sugerida = models.CharField(max_length=30, choices=NATUREZAS_SUGERIDAS, blank=True, default="")
     ativa = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["prioridade", "id"]
+        indexes = [
+            models.Index(
+                fields=["usuario", "versao_motor", "ativa", "prioridade"],
+                name="fin_regra_usr_ver_at_pr_idx",
+            ),
+        ]
+
+    def __str__(self):
+        return self.nome
+
+    def clean(self):
+        super().clean()
+        for campo in ("categoria", "pessoa"):
+            relacionado = getattr(self, campo, None)
+            if relacionado and self.usuario_id and relacionado.usuario_id != self.usuario_id:
+                raise ValidationError({campo: "O cadastro selecionado deve pertencer ao mesmo usuário da regra."})
+
+
+class RegraCategoriaCondicao(TimestampedModel):
+    class Campo(models.TextChoices):
+        DESCRICAO = "DESCRICAO", "Descrição"
+        OBSERVACAO = "OBSERVACAO", "Observação"
+        VALOR = "VALOR", "Valor absoluto"
+        NATUREZA = "NATUREZA", "Tipo atual"
+        ORIGEM = "ORIGEM", "Origem"
+        CONTA = "CONTA", "Conta específica"
+        CARTAO = "CARTAO", "Cartão específico"
+
+    class Operador(models.TextChoices):
+        CONTEM = "CONTEM", "contém"
+        NAO_CONTEM = "NAO_CONTEM", "não contém"
+        IGUAL = "IGUAL", "é igual a"
+        DIFERENTE = "DIFERENTE", "é diferente de"
+        COMECA_COM = "COMECA_COM", "começa com"
+        TERMINA_COM = "TERMINA_COM", "termina com"
+        MAIOR = "MAIOR", "é maior que"
+        MAIOR_IGUAL = "MAIOR_IGUAL", "é maior ou igual a"
+        MENOR = "MENOR", "é menor que"
+        MENOR_IGUAL = "MENOR_IGUAL", "é menor ou igual a"
+
+    OPERADORES_TEXTO = {
+        Operador.CONTEM,
+        Operador.NAO_CONTEM,
+        Operador.IGUAL,
+        Operador.DIFERENTE,
+        Operador.COMECA_COM,
+        Operador.TERMINA_COM,
+    }
+    OPERADORES_VALOR = {
+        Operador.IGUAL,
+        Operador.DIFERENTE,
+        Operador.MAIOR,
+        Operador.MAIOR_IGUAL,
+        Operador.MENOR,
+        Operador.MENOR_IGUAL,
+    }
+    OPERADORES_ESCOLHA = {Operador.IGUAL, Operador.DIFERENTE}
+
+    regra = models.ForeignKey(RegraCategoria, related_name="condicoes", on_delete=models.CASCADE)
+    ordem = models.PositiveSmallIntegerField(default=1)
+    campo = models.CharField(max_length=20, choices=Campo.choices)
+    operador = models.CharField(max_length=20, choices=Operador.choices)
+    valor = models.CharField(max_length=255)
+
+    class Meta:
+        ordering = ["ordem", "id"]
+        constraints = [
+            models.UniqueConstraint(fields=["regra", "ordem"], name="uniq_regra_categoria_condicao_ordem"),
+        ]
+        indexes = [
+            models.Index(fields=["regra", "campo"], name="fin_regra_cond_reg_campo_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.get_campo_display()} {self.get_operador_display()} {self.valor}"
+
+    @classmethod
+    def operadores_permitidos(cls, campo):
+        if campo in {cls.Campo.DESCRICAO, cls.Campo.OBSERVACAO}:
+            return cls.OPERADORES_TEXTO
+        if campo == cls.Campo.VALOR:
+            return cls.OPERADORES_VALOR
+        return cls.OPERADORES_ESCOLHA
+
+    def clean(self):
+        super().clean()
+        if self.operador and self.campo and self.operador not in self.operadores_permitidos(self.campo):
+            raise ValidationError({"operador": "O operador não é compatível com o campo selecionado."})
+        valor = str(self.valor or "").strip()
+        if not valor:
+            raise ValidationError({"valor": "Informe o valor da condição."})
+        if self.campo == self.Campo.VALOR:
+            try:
+                Decimal(valor)
+            except InvalidOperation as exc:
+                raise ValidationError({"valor": "Informe um valor monetário válido."}) from exc
+        if self.campo == self.Campo.NATUREZA and valor not in dict(RegraCategoria.NATUREZAS_SUGERIDAS):
+            raise ValidationError({"valor": "Selecione um tipo de lançamento válido."})
+        if self.campo == self.Campo.ORIGEM and valor not in {"CONTA", "CARTAO"}:
+            raise ValidationError({"valor": "Selecione uma origem válida."})
+        if self.campo in {self.Campo.CONTA, self.Campo.CARTAO} and self.regra_id:
+            modelo = Conta if self.campo == self.Campo.CONTA else Cartao
+            if not valor.isdigit() or not modelo.objects.filter(pk=int(valor), usuario_id=self.regra.usuario_id).exists():
+                raise ValidationError({"valor": "O cadastro selecionado não pertence ao usuário da regra."})
 
 
 class Orcamento(TimestampedModel):

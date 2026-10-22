@@ -15,8 +15,10 @@ from financeiro.models import (
     Conta,
     EventoFinanceiro,
     Fatura,
+    Liquidacao,
     MovimentoConta,
     NaturezaEvento,
+    Orcamento,
     ParcelaCartao,
     ProgramacaoPagamento,
     RateioCategoria,
@@ -462,7 +464,82 @@ class DashboardServiceTests(TestCase):
         self.assertEqual(consulta["resumo"]["faturaConfirmada"], Decimal("100.00"))
         self.assertEqual(consulta["resumo"]["faturaProjetada"], Decimal("165.00"))
         self.assertEqual(consulta["resumo"]["faturaAtual"], Decimal("165.00"))
-        self.assertEqual(consulta["compromissos"]["fatura_projetada"], Decimal("165.00"))
+        self.assertEqual(consulta["compromissos"]["fatura_projetada"], Decimal("0.00"))
+
+    def test_fatura_projetada_dos_compromissos_usa_fechadas_sem_baixa_e_respeita_filtros(self):
+        def criar_cartao(nome, conta=None):
+            return Cartao.objects.create(
+                usuario=self.usuario,
+                nome=nome,
+                conta_pagamento_padrao=conta or self.conta,
+                dia_vencimento=10,
+            )
+
+        def criar_titulo(cartao, ciclo, valor, *, status_fatura=Fatura.Status.FECHADA, conta=None):
+            fatura = Fatura.objects.create(
+                usuario=self.usuario,
+                cartao=cartao,
+                ciclo=ciclo,
+                status=status_fatura,
+            )
+            return Titulo.objects.create(
+                usuario=self.usuario,
+                tipo=Titulo.Tipo.PAGAR,
+                descricao=f"Fatura {ciclo}",
+                vencimento=date(int(ciclo[:4]), int(ciclo[5:]), 10),
+                valor_original=Decimal(valor),
+                saldo_aberto=Decimal(valor),
+                conta=conta or cartao.conta_pagamento_padrao,
+                fatura=fatura,
+            )
+
+        criar_titulo(self.cartao, "2026-10", "100.00")
+        cartao_compativel = criar_cartao("Cartão compatível")
+        criar_titulo(cartao_compativel, "2026-10", "50.00")
+        criar_titulo(self.cartao, "2026-09", "900.00")
+        criar_titulo(criar_cartao("Cartão aberto"), "2026-10", "800.00", status_fatura=Fatura.Status.ABERTA)
+        criar_titulo(criar_cartao("Cartão parcial"), "2026-10", "700.00", status_fatura=Fatura.Status.PARCIAL)
+        criar_titulo(self.outro_cartao, "2026-10", "600.00", conta=self.outra_conta)
+
+        titulo_com_baixa = criar_titulo(criar_cartao("Cartão com baixa"), "2026-10", "400.00")
+        movimento = self.movimento(
+            "-100.00",
+            natureza=NaturezaEvento.PAGAMENTO_FATURA,
+        )
+        Liquidacao.objects.create(
+            titulo=titulo_com_baixa,
+            movimento_conta=movimento,
+            valor=Decimal("100.00"),
+            data=date(2026, 10, 5),
+        )
+
+        titulo_liquidado = criar_titulo(criar_cartao("Cartão liquidado"), "2026-10", "300.00")
+        titulo_liquidado.status = Titulo.Status.LIQUIDADO
+        titulo_liquidado.ativo = False
+        titulo_liquidado.saldo_aberto = Decimal("0.00")
+        titulo_liquidado.save(update_fields=["status", "ativo", "saldo_aberto"])
+
+        consulta = consultar_dashboard(
+            self.usuario,
+            periodo="2026-10",
+            conta_id=self.conta.pk,
+        )
+        somente_cartao = consultar_dashboard(
+            self.usuario,
+            periodo="2026-10",
+            cartao_id=self.cartao.pk,
+        )
+        setembro = consultar_dashboard(
+            self.usuario,
+            periodo="2026-09",
+            conta_id=self.conta.pk,
+            cartao_id=self.cartao.pk,
+        )
+
+        self.assertEqual(consulta["compromissos"]["fatura_projetada"], Decimal("150.00"))
+        self.assertEqual(somente_cartao["compromissos"]["fatura_projetada"], Decimal("100.00"))
+        self.assertEqual(setembro["compromissos"]["fatura_projetada"], Decimal("900.00"))
+        self.assertEqual(consulta["resumo"]["faturaProjetada"], Decimal("0.00"))
 
     def test_fluxo_projetado_soma_realizados_e_previsoes(self):
         self.movimento("200.00")
@@ -1484,6 +1561,9 @@ class LancamentoDashboardTests(TestCase):
         self.assertContains(resposta, "Contas financeiras")
         self.assertContains(resposta, "Limite dos cartões")
         self.assertContains(resposta, "Limite disponível calculado")
+        self.assertContains(resposta, "grid-template-columns:repeat(4,minmax(0,1fr))")
+        self.assertContains(resposta, ".commitment-cards{grid-template-columns:repeat(2,minmax(0,1fr))}")
+        self.assertContains(resposta, ".commitment-cards,.cash-grid,.budget-list{grid-template-columns:1fr}")
         self.assertContains(formulario, 'data-lancamento-form')
         self.assertContains(formulario, 'name="origem"')
 
@@ -1495,6 +1575,85 @@ class LancamentoDashboardTests(TestCase):
         self.assertContains(resposta, "my-financeiro.dashboard.values-hidden")
         self.assertContains(resposta, "data-sensitive-value")
         self.assertContains(resposta, "Valor oculto")
+
+    def test_dashboard_renderiza_orcamento_fixo_ao_lado_do_fluxo(self):
+        Orcamento.objects.create(
+            usuario=self.usuario,
+            categoria=self.categoria,
+            mes="2026-10",
+            ambito=Ambito.PESSOAL,
+            limite=Decimal("100.00"),
+        )
+        criar_lancamento(self.usuario, self.dados(valor=Decimal("95.00")))
+
+        resposta = self.client.get(reverse("dashboard"), {"period": "2026-10"})
+        conteudo = resposta.content.decode()
+        inicio_orcamento = conteudo.index('<article class="panel budget-panel"')
+        fim_orcamento = conteudo.index("</article>", inicio_orcamento)
+        trecho_orcamento = conteudo[inicio_orcamento:fim_orcamento]
+
+        self.assertContains(resposta, 'aria-label="Fluxo de caixa e orçamento"')
+        self.assertContains(resposta, 'class="panel budget-panel"')
+        self.assertContains(resposta, "data-cash-flow-panel")
+        self.assertContains(resposta, "data-budget-overview-panel")
+        self.assertContains(resposta, "Orçamento <span class=\"collapsible-summary-meta\">Total ·")
+        self.assertContains(resposta, "10/2026")
+        self.assertContains(resposta, "R$ 100,00")
+        self.assertContains(resposta, "95,00% comprometido")
+        self.assertContains(resposta, 'style="width:95.00%"')
+        self.assertContains(resposta, 'role="progressbar"')
+        self.assertContains(resposta, 'class="budget-item-budget"')
+        self.assertContains(resposta, 'class="budget-expense-row"')
+        self.assertContains(resposta, 'class="budget-expense-values"')
+        self.assertNotContains(resposta, 'class="budget-bar-fill share"')
+        self.assertNotContains(resposta, "Participação no total orçado")
+        self.assertNotContains(resposta, ">Orçado ")
+        self.assertNotIn("<strong", trecho_orcamento)
+        self.assertEqual(trecho_orcamento.count('role="progressbar"'), 1)
+        self.assertContains(resposta, ".budget-panel h2,.budget-panel h2 *,.budget-item,.budget-item *{font-weight:400}")
+        self.assertContains(resposta, ".budget-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))")
+        self.assertContains(resposta, ".commitment-cards,.cash-grid,.budget-list{grid-template-columns:1fr}")
+        self.assertContains(resposta, "overflow-y:auto")
+        self.assertContains(resposta, "new ResizeObserver(syncBudgetPanelHeight).observe(cashFlowPanel)")
+        self.assertContains(resposta, ".overview-section.simulator-panel{margin-top:22px}")
+        self.assertNotContains(resposta, "data-budget-panel")
+        self.assertNotContains(resposta, "my-financeiro.dashboard.budget-open")
+        self.assertNotContains(resposta, 'title="Abrir ou fechar o indicador de orçamento"')
+        self.assertContains(resposta, "Orçamento próximo do limite")
+        self.assertLess(conteudo.index(">Fluxo de caixa</h2>"), conteudo.index('id="budgetTitle"'))
+        self.assertEqual(resposta.context["pontos_atencao"][0]["tipo"], "orcamento")
+
+        resposta_sem_orcamento = self.client.get(reverse("dashboard"), {"period": "2026-11"})
+        self.assertContains(resposta_sem_orcamento, "Nenhum orçamento cadastrado para 11/2026.")
+        self.assertNotContains(resposta_sem_orcamento, "Cadastrar orçamento")
+
+    def test_dashboard_orcamento_usa_mes_completo_da_data_final_e_ignora_filtros(self):
+        Orcamento.objects.create(
+            usuario=self.usuario,
+            categoria=self.categoria,
+            mes="2026-11",
+            ambito=Ambito.PESSOAL,
+            limite=Decimal("200.00"),
+        )
+        criar_lancamento(
+            self.usuario,
+            self.dados(data=date(2026, 11, 20), valor=Decimal("50.00")),
+        )
+
+        resposta = self.client.get(
+            reverse("dashboard"),
+            {
+                "date_from": "15/10/2026",
+                "date_to": "05/11/2026",
+                "origin": "card",
+            },
+        )
+
+        orcamento = resposta.context["orcamento_dashboard"]
+        self.assertEqual(orcamento["mes"], "2026-11")
+        self.assertEqual(orcamento["total_orcado"], Decimal("200.00"))
+        self.assertEqual(orcamento["categorias"][0]["realizado"], Decimal("50.00"))
+        self.assertEqual(orcamento["categorias"][0]["percentual_comprometido"], Decimal("25.00"))
 
     def test_barras_usam_decimal_com_ponto_no_atributo_css(self):
         outra_categoria = Categoria.objects.create(usuario=self.usuario, nome="Outra categoria")

@@ -374,6 +374,7 @@ def consultar_lancamentos(
     analysis_type="",
     analysis_value="",
     analysis_nature="all",
+    analysis_scope="all",
     group_card_invoices=False,
 ) -> dict:
     origem = origem if origem in {"all", "CONTA", "CARTAO"} else "all"
@@ -509,6 +510,7 @@ def consultar_lancamentos(
             cartao_id=cartao_id,
             origem={"CONTA": "account", "CARTAO": "card"}.get(origem, "all"),
             natureza=analysis_nature,
+            scope=analysis_scope,
             date_from=inicio,
             date_to=fim,
         )
@@ -595,6 +597,7 @@ def consultar_lancamentos(
         "analysis_type": analysis_type,
         "analysis_value": analysis_value,
         "analysis_nature": analysis_nature,
+        "analysis_scope": analysis_scope,
     }
     if group_card_invoices:
         parametros_filtro["group_card_invoices"] = "1"
@@ -629,6 +632,7 @@ def consultar_lancamentos(
         "analysis_type": analysis_type,
         "analysis_value": analysis_value,
         "analysis_nature": analysis_nature,
+        "analysis_scope": analysis_scope,
         "analysis_label": detalhe_analitico["titulo_detalhamento"] if detalhe_analitico else "",
         "total_indicador": sum((linha.valor for linha in filtradas), ZERO) if detalhe_analitico else ZERO,
         "group_card_invoices": group_card_invoices,

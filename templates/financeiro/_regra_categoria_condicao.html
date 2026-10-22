@@ -1,0 +1,49 @@
+<div class="rule-condition" data-condition-row>
+  {{ condicao.id }}
+  {{ condicao.ordem }}
+  {{ condicao.valor }}
+  <span hidden>{{ condicao.DELETE }}</span>
+  <div class="rule-condition-order" aria-hidden="true" data-condition-number></div>
+  <p class="field">
+    {{ condicao.campo.label_tag }}
+    {{ condicao.campo.errors }}
+    {{ condicao.campo }}
+  </p>
+  <p class="field">
+    {{ condicao.operador.label_tag }}
+    {{ condicao.operador.errors }}
+    {{ condicao.operador }}
+  </p>
+  <p class="field condition-value" data-condition-value="TEXT">
+    {{ condicao.valor_texto.label_tag }}
+    {{ condicao.valor_texto.errors }}
+    {{ condicao.valor_texto }}
+  </p>
+  <p class="field condition-value" data-condition-value="NATUREZA">
+    {{ condicao.valor_natureza.label_tag }}
+    {{ condicao.valor_natureza.errors }}
+    {{ condicao.valor_natureza }}
+  </p>
+  <p class="field condition-value" data-condition-value="ORIGEM">
+    {{ condicao.valor_origem.label_tag }}
+    {{ condicao.valor_origem.errors }}
+    {{ condicao.valor_origem }}
+  </p>
+  <p class="field condition-value" data-condition-value="CONTA">
+    {{ condicao.valor_conta.label_tag }}
+    {{ condicao.valor_conta.errors }}
+    {{ condicao.valor_conta }}
+  </p>
+  <p class="field condition-value" data-condition-value="CARTAO">
+    {{ condicao.valor_cartao.label_tag }}
+    {{ condicao.valor_cartao.errors }}
+    {{ condicao.valor_cartao }}
+  </p>
+  <div class="rule-condition-actions">
+    <button class="icon-button" type="button" data-condition-up title="Mover condição para cima" aria-label="Mover condição para cima">↑</button>
+    <button class="icon-button" type="button" data-condition-down title="Mover condição para baixo" aria-label="Mover condição para baixo">↓</button>
+    <button class="icon-button icon-disable" type="button" data-condition-remove title="Remover condição" aria-label="Remover condição">×</button>
+  </div>
+  {% if condicao.valor.errors %}<div class="form-error rule-condition-error">{{ condicao.valor.errors }}</div>{% endif %}
+  {% if condicao.non_field_errors %}<div class="form-error rule-condition-error">{{ condicao.non_field_errors }}</div>{% endif %}
+</div>

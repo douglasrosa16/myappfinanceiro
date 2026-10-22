@@ -1,0 +1,62 @@
+{% extends "financeiro/base.html" %}
+{% block title %}Regras | My App Financeiro{% endblock %}
+{% block content %}
+<header class="top">
+  <div><div class="eyebrow">Automação</div><h1>Regras</h1></div>
+  <a class="button" href="{% url 'regra_categoria_nova' %}" data-modal-url="{% url 'regra_categoria_nova' %}" data-modal-title="Nova regra">Adicionar regra</a>
+</header>
+<div class="notice">Regras novas ativas sugerem dados nas importações e nos novos lançamentos manuais. Nas importações, quando nenhuma regra nova corresponde, o sistema consulta as regras legadas e depois o histórico recente.</div>
+<section class="panel full registry-panel rules-registry">
+  <form class="filters" method="get">
+    <input name="q" aria-label="Buscar regra" placeholder="Buscar por nome ou condição" value="{{ busca }}">
+    <select name="status" aria-label="Situação da regra" onchange="this.form.submit()">
+      <option value="all"{% if status_filtro == "all" %} selected{% endif %}>Todas</option>
+      <option value="active"{% if status_filtro == "active" %} selected{% endif %}>Ativas</option>
+      <option value="inactive"{% if status_filtro == "inactive" %} selected{% endif %}>Inativas</option>
+    </select>
+  </form>
+  <table>
+    <thead>
+      <tr><th>Prioridade / regra</th><th>Condições</th><th>Resultados sugeridos</th><th>Versão</th><th>Situação</th><th>Ações</th></tr>
+    </thead>
+    <tbody>
+      {% for regra in regras %}
+      <tr>
+        <td><strong>{{ regra.nome }}</strong><div class="source">Prioridade {{ regra.prioridade }}</div></td>
+        <td>
+          <span class="pill">{% if regra.combinador == "TODAS" %}E (todas){% else %}OU (qualquer){% endif %}</span>
+          <div class="rule-summary-list">
+            {% for condicao in regra.condicoes_resumo %}<span>{{ condicao }}</span>{% empty %}<span class="muted">Sem condições</span>{% endfor %}
+          </div>
+        </td>
+        <td><div class="rule-summary-list">{% for resultado in regra.resultados_resumo %}<span>{{ resultado }}</span>{% empty %}<span class="muted">Sem resultados</span>{% endfor %}</div></td>
+        <td>{% if regra.versao_motor == "LEGADO" %}<span class="pill">{{ regra.get_versao_motor_display }}</span>{% else %}<span class="pill pill-active">{{ regra.get_versao_motor_display }}</span>{% endif %}</td>
+        <td>{% if regra.ativa %}<span class="pill pill-active">Ativa</span>{% else %}<span class="pill pill-inactive">Inativa</span>{% endif %}</td>
+        <td>
+          <div class="row-actions">
+            <a class="icon-button icon-edit" href="{% url 'regra_categoria_editar' regra.pk %}" data-modal-url="{% url 'regra_categoria_editar' regra.pk %}" data-modal-title="Editar regra" title="Editar" aria-label="Editar {{ regra.nome }}">
+              <svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+            </a>
+            <form method="post" action="{% url 'regra_categoria_duplicar' regra.pk %}">
+              {% csrf_token %}
+              <button class="icon-button icon-clone" type="submit" title="Duplicar" aria-label="Duplicar {{ regra.nome }}">
+                <svg viewBox="0 0 24 24"><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg>
+              </button>
+            </form>
+            <form method="post" action="{% url 'regra_categoria_alternar' regra.pk %}">
+              {% csrf_token %}
+              <button class="icon-button {% if regra.ativa %}icon-disable{% else %}icon-enable{% endif %}" type="submit" title="{% if regra.ativa %}Inativar{% else %}Ativar{% endif %}" aria-label="{% if regra.ativa %}Inativar{% else %}Ativar{% endif %} {{ regra.nome }}">
+                {% if regra.ativa %}<svg viewBox="0 0 24 24"><path d="M17 17 7 7"/><path d="M7 17 17 7"/><circle cx="12" cy="12" r="9"/></svg>{% else %}<svg viewBox="0 0 24 24"><path d="m5 12 5 5L20 7"/></svg>{% endif %}
+              </button>
+            </form>
+          </div>
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="6" class="muted">Nenhuma regra de categorização encontrada.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="small">Regras são inativadas, não excluídas, para preservar a configuração e facilitar auditoria funcional.</p>
+</section>
+{% endblock %}

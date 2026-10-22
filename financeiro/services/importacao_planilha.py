@@ -21,7 +21,6 @@ from financeiro.models import (
 )
 from financeiro.services.cartoes_faturas import criar_compra_cartao
 from financeiro.services.importacao_ofx import (
-    _sugerir_categoria,
     aplicar_sugestao_classificacao,
     preparar_contexto_classificacao,
     sugerir_vinculo_confiavel,
@@ -141,8 +140,8 @@ def _decimal(valor, linha: int) -> Decimal:
         except (InvalidOperation, ValueError):
             raise ValidationError(f"Linha {linha}: valor_total inválido.")
     numero = numero.quantize(Decimal("0.01"))
-    if numero <= 0:
-        raise ValidationError(f"Linha {linha}: valor_total deve ser maior que zero.")
+    if not numero:
+        raise ValidationError(f"Linha {linha}: valor_total deve ser diferente de zero.")
     return numero
 
 
@@ -223,6 +222,13 @@ def chave_compra_planejada(usuario_id: int, cartao_id: int, dados: dict) -> str:
     return hashlib.sha256(base.encode("utf-8")).hexdigest()
 
 
+def _natureza_planilha_cartao(valor: Decimal, descricao: str) -> str:
+    descricao_normalizada = _normalizar_texto(descricao).upper()
+    if "PAGAMENTO DEBITO EM CONTA" in descricao_normalizada:
+        return NaturezaEvento.PAGAMENTO_FATURA
+    return NaturezaEvento.ESTORNO if valor < 0 else NaturezaEvento.DESPESA
+
+
 def criar_itens_planilha(importacao, compras: list[dict]) -> list[ItemImportacao]:
     chaves_existentes = set(
         CompraCartao.objects.filter(
@@ -254,7 +260,7 @@ def criar_itens_planilha(importacao, compras: list[dict]) -> list[ItemImportacao
             data=compra["data_compra"],
             valor=compra["valor_total"],
             descricao_original=compra["descricao"],
-            natureza=NaturezaEvento.DESPESA,
+            natureza=_natureza_planilha_cartao(compra["valor_total"], compra["descricao"]),
             ambito=compra["ambito"],
             numero_parcela=1,
             total_parcelas=compra["quantidade_parcelas"],
@@ -266,13 +272,16 @@ def criar_itens_planilha(importacao, compras: list[dict]) -> list[ItemImportacao
             status=status,
             motivo_status=motivo,
         )
+        item._categoria_informada = compra["categoria"] is not None
+        item._pessoa_informada = compra["pessoa"] is not None
         item._ambito_informado = compra.get("ambito_informado", False)
         itens.append(item)
+    for item in itens:
+        if item.acao != ItemImportacao.Acao.IGNORAR:
+            sugerir_vinculo_confiavel(item)
     contexto = preparar_contexto_classificacao(importacao, itens)
     for item in itens:
         if item.acao != ItemImportacao.Acao.IGNORAR:
-            _sugerir_categoria(item, contexto["regras"])
-            sugerir_vinculo_confiavel(item)
             aplicar_sugestao_classificacao(item, contexto)
     ItemImportacao.objects.bulk_create(itens)
     return itens
@@ -283,12 +292,12 @@ def criar_compra_planejada(item: ItemImportacao):
         item.importacao.usuario,
         {
             "cartao": item.importacao.cartao,
-            "valor": item.valor_final,
+            "valor": abs(item.valor_final),
             "quantidade_parcelas": item.total_parcelas or 1,
             "ciclo": item.importacao.ciclo,
             "data_original": item.data_final,
             "vencimento": None,
-            "natureza": NaturezaEvento.DESPESA,
+            "natureza": item.natureza or NaturezaEvento.DESPESA,
             "descricao": item.descricao_final,
             "pessoa": item.pessoa,
             "pessoa_nome_livre": "",

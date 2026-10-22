@@ -84,7 +84,7 @@ def _resolver_filtros(usuario, ciclo: str | None, conta_id=None, cartao_id=None)
         .values_list("ciclo", flat=True)
         .distinct()
     )
-    ciclo_padrao = ciclos_conhecidos[0] if ciclos_conhecidos else timezone.localdate().strftime("%Y-%m")
+    ciclo_padrao = timezone.localdate().strftime("%Y-%m")
     ciclo_selecionado = ciclo if _ciclo_valido(ciclo) else ciclo_padrao
     if ciclo_selecionado not in ciclos_conhecidos:
         ciclos_conhecidos.append(ciclo_selecionado)

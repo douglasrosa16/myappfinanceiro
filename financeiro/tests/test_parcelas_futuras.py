@@ -1,5 +1,6 @@
 from datetime import date
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -182,6 +183,18 @@ class ParcelasFuturasServiceTests(TestCase):
         self.assertEqual(consulta["compras"][0]["ultimo_ciclo"], "2027-01")
         self.assertEqual(consulta["quantidade_compras"], 1)
         self.assertEqual(consulta["total_compras"], Decimal("45.00"))
+
+    @patch("financeiro.services.parcelas_futuras.timezone.localdate", return_value=date(2026, 10, 21))
+    def test_consulta_sem_ciclo_seleciona_o_mes_corrente(self, _localdate):
+        Fatura.objects.create(usuario=self.usuario, cartao=self.cartao, ciclo="2027-08")
+
+        consulta = consultar_parcelas_futuras(self.usuario)
+
+        self.assertEqual(consulta["ciclo_selecionado"], "2026-10")
+        self.assertEqual(
+            [ciclo["valor"] for ciclo in consulta["ciclos"]],
+            ["2027-08", "2026-10"],
+        )
 
     def test_anuidade_filtros_e_isolamento_por_usuario(self):
         criar_compra_cartao(self.usuario, self._dados_compra(descricao="ANUIDADE DO CARTAO"))

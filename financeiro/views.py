@@ -3,10 +3,11 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import Prefetch, ProtectedError, Q
+from django.db.models import F, Max, Prefetch, ProtectedError, Q
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
+from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
 from django.views.generic import CreateView, ListView, UpdateView
 from decimal import Decimal
@@ -23,6 +24,7 @@ from .forms import (
     ImportacaoPlanilhaForm,
     ItemImportacaoForm,
     LancamentoForm,
+    OrcamentoForm,
     FechamentoFaturaForm,
     ProgramacaoPagamentoForm,
     ConciliacaoPagamentoForm,
@@ -30,8 +32,11 @@ from .forms import (
     TransporteSaldoFaturaForm,
     ReaberturaFaturaForm,
     PessoaForm,
+    RegraCategoriaCondicaoFormSet,
+    RegraCategoriaForm,
+    SugestaoRegraLancamentoForm,
 )
-from .models import Cartao, Categoria, Conta, EventoFinanceiro, Fatura, Importacao, ItemImportacao, Liquidacao, ParcelaCartao, Pessoa, Situacao, Titulo, VinculoTituloImportacao
+from .models import Ambito, Cartao, Categoria, Conta, EventoFinanceiro, Fatura, Importacao, ItemImportacao, Liquidacao, NaturezaEvento, Orcamento, ParcelaCartao, Pessoa, RegraCategoria, RegraCategoriaCondicao, Situacao, Titulo, VinculoTituloImportacao
 from .ofx import OFXError, OFXParser
 from .services.cartoes_faturas import (
     aviso_ciclo_cartao,
@@ -43,6 +48,7 @@ from .services.cartoes_faturas import (
 from .services.dashboard import consultar_dashboard
 from .services.importacao_ofx import (
     aplicar_alteracoes_lote,
+    aplicar_classificacao_primeira_revisao,
     atualizar_status_revisao,
     buscar_candidatos_vinculo,
     confirmar_importacao,
@@ -54,6 +60,12 @@ from .services.importacao_ofx import (
 )
 from .services.importacao_planilha import criar_itens_planilha, ler_compras_planilha
 from .services.parcelas_futuras import consultar_parcelas_futuras
+from .services.orcamentos import (
+    alertas_orcamento_dashboard,
+    enriquecer_orcamentos_com_realizado,
+    resumir_orcamento_dashboard,
+)
+from .services.regras_categoria import DadosClassificacao, carregar_regras_categoria, melhor_regra_manual
 from .services.saldo_contas import reprocessar_saldo_conta
 from .services.lancamentos import (
     consultar_lancamentos,
@@ -100,6 +112,15 @@ def dashboard(request):
         origem=request.GET.get("origin", "all"),
         natureza=request.GET.get("nature", "all"),
     )
+    orcamento_dashboard = resumir_orcamento_dashboard(
+        request.user,
+        contexto["data_final"].strftime("%Y-%m"),
+    )
+    contexto["orcamento_dashboard"] = orcamento_dashboard
+    contexto["pontos_atencao"] = (
+        alertas_orcamento_dashboard(orcamento_dashboard)
+        + contexto["pontos_atencao"]
+    )[:3]
     return render(request, "financeiro/dashboard.html", contexto)
 
 
@@ -118,6 +139,7 @@ def dashboard_detalhamento(request):
             cartao_id=request.GET.get("card"),
             origem=request.GET.get("origin", "all"),
             natureza=request.GET.get("nature", "all"),
+            scope=request.GET.get("scope", "all"),
         )
     except DetalhamentoDashboardInvalido as exc:
         raise Http404("Detalhamento não encontrado.") from exc
@@ -155,6 +177,7 @@ def _url_retorno_lancamento(request, periodo: str, destino_padrao="eventos"):
             "analysis_type",
             "analysis_value",
             "analysis_nature",
+            "analysis_scope",
             "group_card_invoices",
         ):
             valor = request.GET.get(nome)
@@ -186,6 +209,7 @@ def lancamentos(request):
             analysis_type=request.GET.get("analysis_type", ""),
             analysis_value=request.GET.get("analysis_value", ""),
             analysis_nature=request.GET.get("analysis_nature", "all"),
+            analysis_scope=request.GET.get("analysis_scope", "all"),
             group_card_invoices=request.GET.get("group_card_invoices"),
         )
     except DetalhamentoDashboardInvalido as exc:
@@ -256,6 +280,8 @@ def lancamento_novo(request):
         "titulo": titulo,
         "formulario_lancamento": True,
         "ciclo_aviso": form.ciclo_aviso,
+        "sugestao_regra_url": reverse("regra_categoria_sugerir_lancamento") if clone_evento is None else "",
+        "sugestao_resultados_protegidos": form.is_bound,
     })
 
 
@@ -533,6 +559,8 @@ def compra_cartao_nova(request):
         "titulo": "Nova compra",
         "formulario_lancamento": True,
         "ciclo_aviso": form.ciclo_aviso,
+        "sugestao_regra_url": reverse("regra_categoria_sugerir_lancamento"),
+        "sugestao_resultados_protegidos": form.is_bound,
     })
 
 
@@ -700,6 +728,154 @@ class CategoriaUpdateView(UsuarioMixin, UpdateView):
         return kwargs
 
 
+def _mes_orcamento(valor):
+    if not valor:
+        return ""
+    valor = valor.strip()
+    if len(valor) == 7 and valor[2] == "/" and valor[:2].isdigit() and valor[3:].isdigit():
+        mes, ano = valor.split("/")
+        if mes in {f"{numero:02d}" for numero in range(1, 13)}:
+            return f"{ano}-{mes}"
+    return valor if len(valor) == 7 and valor[4] == "-" else ""
+
+
+def _proximo_mes_orcamento(valor):
+    ano, mes = map(int, valor.split("-"))
+    return f"{ano + (mes == 12):04d}-{1 if mes == 12 else mes + 1:02d}"
+
+
+def _url_retorno_orcamentos(request):
+    filtros = {
+        nome: request.GET.get(nome, "")
+        for nome in ("categoria", "mes", "ambito")
+        if nome in request.GET
+    }
+    query = urlencode(filtros)
+    return f"{reverse('orcamentos')}?{query}" if query else reverse("orcamentos")
+
+
+class OrcamentoListView(UsuarioMixin, ListView):
+    model = Orcamento
+    template_name = "financeiro/orcamentos.html"
+    context_object_name = "orcamentos"
+
+    def get_queryset(self):
+        queryset = super().get_queryset().select_related("categoria", "categoria__categoria_pai")
+        categoria = self.request.GET.get("categoria", "")
+        ambito = self.request.GET.get("ambito", "")
+        mes = self.request.GET.get("mes")
+        if mes is None:
+            hoje = timezone.localdate()
+            mes = f"{hoje.year:04d}-{hoje.month:02d}"
+        else:
+            mes = _mes_orcamento(mes)
+        if categoria.isdigit():
+            queryset = queryset.filter(categoria_id=int(categoria))
+        if mes:
+            queryset = queryset.filter(mes=mes)
+        if ambito in Ambito.values:
+            queryset = queryset.filter(ambito=ambito)
+        return queryset.order_by("-mes", "categoria__nome", "ambito", "id")
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["orcamentos"] = enriquecer_orcamentos_com_realizado(
+            self.request.user,
+            list(context["orcamentos"]),
+        )
+        mes_enviado = self.request.GET.get("mes")
+        if mes_enviado is None:
+            hoje = timezone.localdate()
+            mes_filtro = f"{hoje.month:02d}/{hoje.year:04d}"
+        else:
+            normalizado = _mes_orcamento(mes_enviado)
+            mes_filtro = f"{normalizado[5:7]}/{normalizado[:4]}" if normalizado else ""
+        context.update(
+            {
+                "categorias": Categoria.objects.filter(
+                    usuario=self.request.user,
+                    tipo=Categoria.Tipo.DESPESA,
+                    categoria_pai__isnull=True,
+                    orcamento__isnull=False,
+                ).select_related("categoria_pai").distinct().order_by("nome"),
+                "ambitos": Ambito.choices,
+                "categoria_filtro": self.request.GET.get("categoria", ""),
+                "mes_filtro": mes_filtro,
+                "ambito_filtro": self.request.GET.get("ambito", ""),
+                "filtros_query": urlencode(
+                    {
+                        "categoria": self.request.GET.get("categoria", ""),
+                        "mes": mes_filtro,
+                        "ambito": self.request.GET.get("ambito", ""),
+                    }
+                ),
+            }
+        )
+        return context
+
+
+class OrcamentoCreateView(UsuarioMixin, CreateView):
+    model = Orcamento
+    form_class = OrcamentoForm
+    template_name = "financeiro/form.html"
+    extra_context = {"titulo": "Novo orçamento"}
+
+    def get_initial(self):
+        initial = super().get_initial()
+        mes = _mes_orcamento(self.request.GET.get("mes", ""))
+        if mes:
+            initial["mes"] = mes
+        return initial
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["usuario"] = self.request.user
+        return kwargs
+
+    def get_success_url(self):
+        return _url_retorno_orcamentos(self.request)
+
+
+class OrcamentoCloneView(OrcamentoCreateView):
+    extra_context = {"titulo": "Clonar orçamento"}
+
+    def get_orcamento_origem(self):
+        return get_object_or_404(Orcamento, pk=self.kwargs["pk"], usuario=self.request.user)
+
+    def get_initial(self):
+        origem = self.get_orcamento_origem()
+        return {
+            "categoria": origem.categoria,
+            "mes": _proximo_mes_orcamento(origem.mes),
+            "ambito": origem.ambito,
+            "limite": origem.limite,
+        }
+
+
+class OrcamentoUpdateView(UsuarioMixin, UpdateView):
+    model = Orcamento
+    form_class = OrcamentoForm
+    template_name = "financeiro/form.html"
+    extra_context = {"titulo": "Editar orçamento"}
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["usuario"] = self.request.user
+        return kwargs
+
+    def get_success_url(self):
+        return _url_retorno_orcamentos(self.request)
+
+
+@login_required
+@require_POST
+def excluir_orcamento(request, pk):
+    orcamento = get_object_or_404(Orcamento, pk=pk, usuario=request.user)
+    orcamento.delete()
+    messages.success(request, "Orçamento excluído.")
+    return redirect(_url_retorno_orcamentos(request))
+
+
 class PessoaListView(UsuarioMixin, ListView):
     model = Pessoa
     template_name = "financeiro/lista.html"
@@ -726,6 +902,283 @@ class PessoaUpdateView(UsuarioMixin, UpdateView):
     template_name = "financeiro/form.html"
     success_url = reverse_lazy("pessoas")
     extra_context = {"titulo": "Editar pessoa"}
+
+
+def _condicoes_ordenadas_formset(formset):
+    condicoes = [
+        form for form in formset.forms
+        if form.cleaned_data and not form.cleaned_data.get("DELETE") and form.cleaned_data.get("campo")
+    ]
+    return sorted(
+        condicoes,
+        key=lambda form: (form.cleaned_data.get("ordem") or 9999, form.prefix),
+    )
+
+
+def _regra_permanece_legada(regra, condicoes):
+    if regra.versao_motor != RegraCategoria.VersaoMotor.LEGADO or len(condicoes) != 1:
+        return False
+    condicao = condicoes[0].cleaned_data
+    return (
+        regra.combinador == RegraCategoria.Combinador.TODAS
+        and regra.categoria_id is not None
+        and not regra.natureza_sugerida
+        and condicao.get("campo") == RegraCategoriaCondicao.Campo.DESCRICAO
+        and condicao.get("operador") == RegraCategoriaCondicao.Operador.CONTEM
+        and len(condicao.get("valor") or "") <= 160
+    )
+
+
+def _salvar_condicoes_regra(regra, formset, condicoes):
+    # Libera temporariamente as posições atuais para permitir trocar a ordem
+    # sem violar a constraint única durante os saves intermediários.
+    regra.condicoes.update(ordem=F("ordem") + 10000)
+    formset.save(commit=False)
+    for condicao in formset.deleted_objects:
+        condicao.delete()
+    for ordem, form_condicao in enumerate(condicoes, start=1):
+        condicao = form_condicao.save(commit=False)
+        condicao.regra = regra
+        condicao.ordem = ordem
+        condicao.save()
+
+
+def _formulario_regra_categoria(request, regra=None):
+    criando = regra is None
+    if criando:
+        ultima_prioridade = (
+            RegraCategoria.objects.filter(usuario=request.user).aggregate(maior=Max("prioridade"))["maior"]
+            or 0
+        )
+        regra = RegraCategoria(usuario=request.user, prioridade=ultima_prioridade + 1)
+    versao_anterior = regra.versao_motor
+    form = RegraCategoriaForm(request.POST or None, instance=regra, usuario=request.user)
+    formset = RegraCategoriaCondicaoFormSet(
+        request.POST or None,
+        instance=regra,
+        prefix="condicoes",
+        form_kwargs={"usuario": request.user},
+    )
+    if request.method == "POST" and form.is_valid() and formset.is_valid():
+        condicoes = _condicoes_ordenadas_formset(formset)
+        with transaction.atomic():
+            regra = form.save(commit=False)
+            regra.usuario = request.user
+            if criando:
+                regra.versao_motor = RegraCategoria.VersaoMotor.NOVO
+                regra.texto = ""
+            elif _regra_permanece_legada(regra, condicoes):
+                regra.versao_motor = RegraCategoria.VersaoMotor.LEGADO
+                regra.texto = condicoes[0].cleaned_data["valor"]
+            else:
+                regra.versao_motor = RegraCategoria.VersaoMotor.NOVO
+            regra.save()
+            _salvar_condicoes_regra(regra, formset, condicoes)
+        messages.success(request, "Regra salva com sucesso.")
+        if versao_anterior == RegraCategoria.VersaoMotor.LEGADO and regra.versao_motor == RegraCategoria.VersaoMotor.NOVO:
+            messages.warning(
+                request,
+                "A regra foi promovida para o novo formato e poderá sugerir dados nas próximas importações e nos novos lançamentos manuais.",
+            )
+        return redirect("regras_categoria")
+    return render(
+        request,
+        "financeiro/regra_categoria_form.html",
+        {
+            "form": form,
+            "formset": formset,
+            "regra": regra,
+            "titulo": "Nova regra" if criando else "Editar regra",
+        },
+    )
+
+
+@login_required
+def regras_categoria(request):
+    termo = request.GET.get("q", "").strip()
+    status = request.GET.get("status", "all")
+    queryset = (
+        RegraCategoria.objects.filter(usuario=request.user)
+        .select_related("categoria__categoria_pai", "pessoa")
+        .prefetch_related("condicoes")
+    )
+    if termo:
+        queryset = queryset.filter(Q(nome__icontains=termo) | Q(condicoes__valor__icontains=termo)).distinct()
+    if status == "active":
+        queryset = queryset.filter(ativa=True)
+    elif status == "inactive":
+        queryset = queryset.filter(ativa=False)
+    regras = list(queryset.order_by("prioridade", "id"))
+    contas = {str(item.pk): item.nome for item in Conta.objects.filter(usuario=request.user)}
+    cartoes = {str(item.pk): item.nome for item in Cartao.objects.filter(usuario=request.user)}
+    naturezas = dict(RegraCategoria.NATUREZAS_SUGERIDAS)
+    origens = {"CONTA": "Conta financeira", "CARTAO": "Cartão de crédito"}
+    for regra in regras:
+        regra.condicoes_resumo = []
+        for condicao in regra.condicoes.all():
+            valor = condicao.valor
+            if condicao.campo == RegraCategoriaCondicao.Campo.CONTA:
+                valor = contas.get(valor, f"Conta #{valor}")
+            elif condicao.campo == RegraCategoriaCondicao.Campo.CARTAO:
+                valor = cartoes.get(valor, f"Cartão #{valor}")
+            elif condicao.campo == RegraCategoriaCondicao.Campo.NATUREZA:
+                valor = naturezas.get(valor, valor)
+            elif condicao.campo == RegraCategoriaCondicao.Campo.ORIGEM:
+                valor = origens.get(valor, valor)
+            regra.condicoes_resumo.append(
+                f"{condicao.get_campo_display()} {condicao.get_operador_display()} {valor}"
+            )
+        resultados = []
+        if regra.categoria_id:
+            resultados.append(f"Categoria: {regra.categoria.rotulo_com_pai}")
+        if regra.ambito and regra.ambito != "NAO_DEFINIDO":
+            resultados.append(f"Âmbito: {regra.get_ambito_display()}")
+        if regra.pessoa_id:
+            resultados.append(f"Pessoa: {regra.pessoa.nome}")
+        if regra.natureza_sugerida:
+            resultados.append(f"Tipo: {regra.get_natureza_sugerida_display()}")
+        regra.resultados_resumo = resultados
+    return render(
+        request,
+        "financeiro/regras_categoria.html",
+        {
+            "regras": regras,
+            "busca": termo,
+            "status_filtro": status,
+        },
+    )
+
+
+@login_required
+def regra_categoria_nova(request):
+    return _formulario_regra_categoria(request)
+
+
+@login_required
+def regra_categoria_editar(request, pk):
+    regra = get_object_or_404(RegraCategoria, pk=pk, usuario=request.user)
+    return _formulario_regra_categoria(request, regra)
+
+
+@login_required
+@require_POST
+def regra_categoria_duplicar(request, pk):
+    original = get_object_or_404(
+        RegraCategoria.objects.prefetch_related("condicoes"),
+        pk=pk,
+        usuario=request.user,
+    )
+    with transaction.atomic():
+        copia = RegraCategoria.objects.create(
+            usuario=request.user,
+            texto="",
+            nome=f"Cópia de {original.nome}"[:160],
+            prioridade=original.prioridade,
+            combinador=original.combinador,
+            versao_motor=RegraCategoria.VersaoMotor.NOVO,
+            pessoa=original.pessoa,
+            categoria=original.categoria,
+            ambito=original.ambito,
+            natureza_sugerida=original.natureza_sugerida,
+            ativa=original.ativa,
+        )
+        RegraCategoriaCondicao.objects.bulk_create(
+            [
+                RegraCategoriaCondicao(
+                    regra=copia,
+                    ordem=condicao.ordem,
+                    campo=condicao.campo,
+                    operador=condicao.operador,
+                    valor=condicao.valor,
+                )
+                for condicao in original.condicoes.all()
+            ]
+        )
+    messages.success(
+        request,
+        "Regra duplicada no novo formato; se ativa, ela poderá sugerir dados nas próximas importações e nos novos lançamentos manuais.",
+    )
+    return redirect("regras_categoria")
+
+
+@login_required
+@require_POST
+def regra_categoria_alternar(request, pk):
+    regra = get_object_or_404(RegraCategoria, pk=pk, usuario=request.user)
+    regra.ativa = not regra.ativa
+    regra.save(update_fields=["ativa", "atualizado_em"])
+    messages.success(request, "Regra ativada." if regra.ativa else "Regra inativada; seu cadastro foi preservado.")
+    return redirect("regras_categoria")
+
+
+@login_required
+@require_POST
+def regra_categoria_sugerir_lancamento(request):
+    form = SugestaoRegraLancamentoForm(request.POST, usuario=request.user)
+    if not form.is_valid():
+        erros = {
+            campo: [erro["message"] for erro in lista]
+            for campo, lista in form.errors.get_json_data().items()
+        }
+        return JsonResponse({"encontrada": False, "erros": erros}, status=400)
+
+    dados = DadosClassificacao(
+        descricao=form.cleaned_data.get("descricao") or "",
+        observacao=form.cleaned_data.get("observacao") or "",
+        valor=form.cleaned_data.get("valor"),
+        natureza=form.cleaned_data.get("natureza") or "",
+        origem=form.cleaned_data.get("origem") or "",
+        conta_id=getattr(form.cleaned_data.get("conta"), "pk", None),
+        cartao_id=getattr(form.cleaned_data.get("cartao"), "pk", None),
+    )
+    resultado = melhor_regra_manual(dados, carregar_regras_categoria(request.user))
+    regra = resultado.regra
+    sugestoes_vazias = {
+        "categoria": None,
+        "pessoa": None,
+        "ambito": None,
+        "natureza": None,
+    }
+    if not regra:
+        return JsonResponse({"encontrada": False, "regra": None, "sugestoes": sugestoes_vazias})
+
+    categoria = regra.categoria
+    pessoa = regra.pessoa
+    categoria_disponivel = categoria and categoria.usuario_id == request.user.pk and categoria.ativa
+    pessoa_disponivel = pessoa and pessoa.usuario_id == request.user.pk and pessoa.ativa
+    natureza = None
+    if regra.versao_motor == RegraCategoria.VersaoMotor.NOVO and regra.natureza_sugerida:
+        naturezas_permitidas = {NaturezaEvento.DESPESA, NaturezaEvento.ESTORNO}
+        if dados.origem != Importacao.Origem.CARTAO:
+            naturezas_permitidas.add(NaturezaEvento.RECEITA)
+        if regra.natureza_sugerida in naturezas_permitidas:
+            natureza = regra.natureza_sugerida
+
+    sugestoes = {
+        "categoria": (
+            {"id": categoria.pk, "rotulo": categoria.rotulo_com_pai}
+            if categoria_disponivel
+            else None
+        ),
+        "pessoa": (
+            {"id": pessoa.pk, "rotulo": pessoa.nome}
+            if pessoa_disponivel
+            else None
+        ),
+        "ambito": regra.ambito if regra.ambito in {Ambito.PESSOAL, Ambito.PROFISSIONAL} else None,
+        "natureza": natureza,
+    }
+    return JsonResponse(
+        {
+            "encontrada": True,
+            "regra": {
+                "id": regra.pk,
+                "nome": regra.nome,
+                "versao": regra.versao_motor,
+            },
+            "sugestoes": sugestoes,
+        }
+    )
 
 
 @login_required
@@ -794,9 +1247,15 @@ def importar_planilha(request):
                 importacao = form.save(commit=False)
                 importacao.data_inicio = min(compra["data_compra"] for compra in compras)
                 importacao.data_fim = max(compra["data_compra"] for compra in compras)
-                importacao.total_debitos = sum((compra["valor_total"] for compra in compras), Decimal("0.00"))
-                importacao.total_creditos = Decimal("0.00")
-                importacao.total_liquido = -importacao.total_debitos
+                importacao.total_debitos = sum(
+                    (compra["valor_total"] for compra in compras if compra["valor_total"] > 0),
+                    Decimal("0.00"),
+                )
+                importacao.total_creditos = sum(
+                    (-compra["valor_total"] for compra in compras if compra["valor_total"] < 0),
+                    Decimal("0.00"),
+                )
+                importacao.total_liquido = importacao.total_creditos - importacao.total_debitos
                 importacao.save()
                 criar_itens_planilha(importacao, compras)
         except ValidationError as exc:
@@ -843,6 +1302,9 @@ def importacao_revisao(request, pk):
             messages.error(request, "Este lote não está mais disponível para edição.")
             return redirect("importacao_resultado", pk=importacao.pk)
         item = get_object_or_404(ItemImportacao, pk=request.POST.get("item_id"), importacao=importacao)
+        acao_anterior = item.acao
+        status_anterior = item.status
+        revisado_em_anterior = item.revisado_em
         form_item = ItemImportacaoForm(request.POST, instance=item, usuario=request.user)
         if form_item.is_valid():
             try:
@@ -855,7 +1317,27 @@ def importacao_revisao(request, pk):
                         titulos_ids=form_item.cleaned_data.get("titulos_alvo_ids"),
                         movimento_id=form_item.cleaned_data.get("movimento_alvo_id"),
                         parcela_id=form_item.cleaned_data.get("parcela_alvo_id"),
+                        remover_vinculo=form_item.cleaned_data.get("remover_vinculo", False),
                     )
+                    if (
+                        revisado_em_anterior is None
+                        and item.acao == ItemImportacao.Acao.CRIAR
+                        and (
+                            acao_anterior != ItemImportacao.Acao.CRIAR
+                            or status_anterior != ItemImportacao.Status.NOVO
+                        )
+                    ):
+                        protegidos = {"natureza"}
+                        if form_item.cleaned_data.get("categoria"):
+                            protegidos.add("categoria")
+                        if form_item.cleaned_data.get("pessoa"):
+                            protegidos.add("pessoa")
+                        if form_item.cleaned_data.get("ambito") in {"PESSOAL", "PROFISSIONAL"}:
+                            protegidos.add("ambito")
+                        aplicar_classificacao_primeira_revisao(
+                            item,
+                            campos_protegidos=protegidos,
+                        )
                     atualizar_status_revisao(item)
                     item.save()
                     sincronizar_titulos_multiplos(item, getattr(item, "_titulos_multiplos_ids", []))
@@ -873,6 +1355,11 @@ def importacao_revisao(request, pk):
                                 "status": item.status,
                                 "status_display": item.get_status_display(),
                                 "motivo": item.motivo_status or "Novo registro identificado.",
+                                "natureza": item.natureza,
+                                "categoria": item.categoria_id or "",
+                                "pessoa": item.pessoa_id or "",
+                                "ambito": item.ambito,
+                                "acao": item.acao,
                                 "revisado": item.revisado_em is not None,
                                 "aviso_ciclo": aviso_ciclo_cartao(
                                     importacao.cartao,
@@ -1011,6 +1498,7 @@ def importacao_aplicar_lote(request, pk):
                                 "categoria": item.categoria_id or "",
                                 "pessoa": item.pessoa_id or "",
                                 "ambito": item.ambito,
+                                "natureza": item.natureza,
                                 "acao": item.acao,
                                 "observacao": item.observacao,
                                 "revisado": item.revisado_em is not None,

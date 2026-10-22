@@ -5,7 +5,6 @@ from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import Prefetch
 from django.utils import timezone
 
 from financeiro.models import (
@@ -14,7 +13,6 @@ from financeiro.models import (
     Conta,
     EventoFinanceiro,
     Fatura,
-    ItemImportacao,
     NaturezaEvento,
     ParcelaCartao,
     RateioCategoria,
@@ -103,13 +101,7 @@ def _valor_assinado(parcela: ParcelaCartao) -> Decimal:
 
 
 def _chave_ordem(parcela: ParcelaCartao) -> tuple:
-    if parcela.itens_origem:
-        item = min(
-            parcela.itens_origem,
-            key=lambda registro: (registro.importacao_id, registro.posicao, registro.id),
-        )
-        return 0, item.importacao_id, item.posicao, item.id, parcela.id
-    return 1, 0, 0, 0, parcela.id
+    return parcela.data_original_exibicao, parcela.compra.evento_id, parcela.id
 
 
 def _acoes_fatura(fatura: Fatura, titulo: Titulo | None, pendencias: int) -> dict:
@@ -197,7 +189,6 @@ def consultar_cartoes_faturas(usuario, ciclo=None, conta_id=None, cartao_id=None
     if cartao_selecionado:
         cartoes_filtrados = cartoes_filtrados.filter(pk=cartao_selecionado.pk)
 
-    itens_origem = ItemImportacao.objects.select_related("importacao").order_by("importacao_id", "posicao", "id")
     parcelas = list(
         ParcelaCartao.objects.filter(
             compra__usuario=usuario,
@@ -211,7 +202,6 @@ def consultar_cartoes_faturas(usuario, ciclo=None, conta_id=None, cartao_id=None
             "categoria",
             "pessoa",
         )
-        .prefetch_related(Prefetch("itemimportacao_set", queryset=itens_origem, to_attr="itens_origem"))
     )
     parcelas = [
         parcela
