@@ -994,6 +994,39 @@ class DashboardServiceTests(TestCase):
         self.assertEqual(detalhe["linhas"][0].data_original, date(2026, 9, 15))
         self.assertEqual(detalhe["total_indicador"], Decimal("50.00"))
 
+    def test_detalhamento_ordena_compras_por_data_original_e_id_do_lancamento(self):
+        primeira = self.parcela(
+            "10.00",
+            categoria=self.alimentacao,
+            ciclo="2026-10",
+            data_original=date(2026, 9, 10),
+        )
+        segunda = self.parcela(
+            "20.00",
+            categoria=self.alimentacao,
+            ciclo="2026-10",
+            data_original=date(2026, 9, 10),
+        )
+        posterior = self.parcela(
+            "30.00",
+            categoria=self.alimentacao,
+            ciclo="2026-10",
+            data_original=date(2026, 9, 20),
+        )
+
+        detalhe = consultar_detalhamento_dashboard(
+            self.usuario,
+            "category",
+            str(self.alimentacao.pk),
+            periodo="2026-10",
+            origem="card",
+        )
+
+        self.assertEqual(
+            [linha.registro_id for linha in detalhe["linhas"]],
+            [primeira.pk, segunda.pk, posterior.pk],
+        )
+
     def test_compromissos_usam_data_atual_e_janela_de_trinta_dias(self):
         Titulo.objects.create(
             usuario=self.usuario,

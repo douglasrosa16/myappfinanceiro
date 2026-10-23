@@ -579,6 +579,40 @@ class RealizacaoOrcamentosTests(TestCase):
         self.assertEqual(todos["total_indicador"], Decimal("150.00"))
         self.assertNotIn("analysis_scope", parse_qs(urlparse(todos["lancamentos_url"]).query))
 
+    def test_detalhamento_do_orcamento_ordena_por_data_original_e_id_do_lancamento(self):
+        posterior = self.movimento(
+            "30.00",
+            categoria=self.filha,
+            ambito=Ambito.PESSOAL,
+            data_evento=date(2026, 10, 20),
+        )
+        primeiro = self.movimento(
+            "10.00",
+            categoria=self.filha,
+            ambito=Ambito.PESSOAL,
+            data_evento=date(2026, 10, 5),
+        )
+        segundo = self.movimento(
+            "20.00",
+            categoria=self.filha,
+            ambito=Ambito.PESSOAL,
+            data_evento=date(2026, 10, 5),
+        )
+
+        detalhe = consultar_detalhamento_dashboard(
+            self.usuario,
+            tipo="category",
+            valor=str(self.categoria.pk),
+            scope=Ambito.PESSOAL,
+            date_from=date(2026, 10, 1),
+            date_to=date(2026, 10, 31),
+        )
+
+        self.assertEqual(
+            [linha.evento_id for linha in detalhe["linhas"]],
+            [primeiro.pk, segundo.pk, posterior.pk],
+        )
+
     def test_fallback_de_lancamentos_preserva_e_aplica_ambito_analitico(self):
         self.movimento("35.00", categoria=self.filha, ambito=Ambito.PESSOAL)
         self.movimento("75.00", categoria=self.filha, ambito=Ambito.PROFISSIONAL)

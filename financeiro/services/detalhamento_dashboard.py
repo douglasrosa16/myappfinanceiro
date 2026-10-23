@@ -183,7 +183,14 @@ def consultar_detalhamento_dashboard(
         for contribuicoes in agrupadas.values()
         if (linha := _linha_detalhamento(contribuicoes)) is not None
     ]
-    linhas.sort(key=lambda item: (item.data_referencia, item.origem, item.registro_id), reverse=True)
+    linhas.sort(
+        key=lambda item: (
+            item.data_original,
+            item.evento_id,
+            item.origem,
+            item.registro_id,
+        )
+    )
     total = sum((linha.valor for linha in linhas), ZERO)
     return {
         "titulo_detalhamento": indicador["rotulo"],
