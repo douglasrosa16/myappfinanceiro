@@ -1,0 +1,102 @@
+{% extends "financeiro/base.html" %}
+{% block title %}{{ titulo }} | My App Financeiro{% endblock %}
+{% block content %}
+<header class="top">
+  <div><div class="eyebrow">Planejamento</div><h1>{{ titulo }}</h1></div>
+</header>
+<section class="panel" data-modal-content>
+  <style>
+    .budget-clone-form{grid-template-columns:1fr 1fr}
+    .budget-clone-summary{display:grid;gap:10px;padding:14px;border:1px solid var(--line);border-radius:8px;background:#f7f9fc}
+    .budget-clone-summary p{margin:0}
+    .budget-clone-warning{border-color:#f0c36d;background:#fff8e8;color:#7a4b00}
+    .budget-clone-empty{border-color:#bfd3f2;background:#edf3fb;color:var(--ink)}
+    .budget-clone-periods{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .budget-clone-period{display:grid;gap:3px;padding:12px;background:white;border:1px solid var(--line);border-radius:7px}
+    .budget-clone-period span{font-size:13px;color:var(--muted)}
+    .budget-clone-form button:disabled{cursor:not-allowed}
+    @media(max-width:700px){
+      .budget-clone-form,.budget-clone-periods{grid-template-columns:1fr}
+      .budget-clone-form .actions{flex-direction:column-reverse}
+      .budget-clone-form .actions button{width:100%;justify-content:center}
+    }
+  </style>
+  <form method="post" class="form-grid budget-clone-form" action="{{ request.get_full_path }}">
+    {% csrf_token %}
+    {% if resumo_clonagem %}
+      <input type="hidden" name="mes_origem" value="{{ resumo_clonagem.mes_origem }}">
+      <input type="hidden" name="mes_destino" value="{{ resumo_clonagem.mes_destino }}">
+      <div class="budget-clone-periods wide" aria-label="Períodos revisados">
+        <div class="budget-clone-period"><span>Período de origem</span><strong>{{ resumo_clonagem.mes_origem_rotulo }}</strong></div>
+        <div class="budget-clone-period"><span>Período de destino</span><strong>{{ resumo_clonagem.mes_destino_rotulo }}</strong></div>
+      </div>
+    {% else %}
+      <p class="field field-mes_origem">
+        {{ form.mes_origem.label_tag }}
+        {{ form.mes_origem.errors }}
+        <span class="temporal-control" data-temporal-control="month">
+          {{ form.mes_origem }}
+          <button type="button" data-open-temporal-picker aria-label="Abrir seletor de período de origem">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3v3M17 3v3M4 9h16M5 5h14a1 1 0 0 1 1 1v14H4V6a1 1 0 0 1 1-1Z"/></svg>
+          </button>
+          <input class="temporal-native" type="month" tabindex="-1" aria-hidden="true">
+        </span>
+      </p>
+      <p class="field field-mes_destino">
+        {{ form.mes_destino.label_tag }}
+        {{ form.mes_destino.errors }}
+        <span class="temporal-control" data-temporal-control="month">
+          {{ form.mes_destino }}
+          <button type="button" data-open-temporal-picker aria-label="Abrir seletor de período de destino">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3v3M17 3v3M4 9h16M5 5h14a1 1 0 0 1 1 1v14H4V6a1 1 0 0 1 1-1Z"/></svg>
+          </button>
+          <input class="temporal-native" type="month" tabindex="-1" aria-hidden="true">
+        </span>
+      </p>
+    {% endif %}
+
+    {% if form.non_field_errors %}
+      <div class="form-error wide" role="alert">{{ form.non_field_errors }}</div>
+    {% endif %}
+
+    {% if resumo_clonagem %}
+      {% if resumo_clonagem.quantidade_origem == 0 %}
+        <div class="budget-clone-summary budget-clone-empty wide" role="status">
+          <p>Nenhum orçamento foi encontrado no período de origem {{ resumo_clonagem.mes_origem_rotulo }}.</p>
+          <p>Altere os períodos para continuar.</p>
+        </div>
+      {% elif resumo_clonagem.quantidade_destino > 0 %}
+        <div class="budget-clone-summary budget-clone-warning wide" role="status">
+          <p>A origem contém <strong>{{ resumo_clonagem.quantidade_origem }}</strong> orçamento(s).</p>
+          <p>O destino já contém <strong>{{ resumo_clonagem.quantidade_destino }}</strong> registro(s). A clonagem completa substituirá todos eles.</p>
+          <p>Na clonagem parcial, <strong>{{ resumo_clonagem.quantidade_faltantes }}</strong> combinação(ões) de categoria e âmbito será(ão) incluída(s), e os registros atuais serão preservados.</p>
+        </div>
+      {% else %}
+        <div class="budget-clone-summary wide" role="status">
+          <p>A origem contém <strong>{{ resumo_clonagem.quantidade_origem }}</strong> orçamento(s).</p>
+          <p>O período de destino está vazio e receberá uma cópia completa da origem.</p>
+        </div>
+      {% endif %}
+    {% else %}
+      <div class="form-note wide">Escolha os períodos e continue para revisar a quantidade de orçamentos antes da clonagem.</div>
+    {% endif %}
+
+    <div class="actions wide">
+      <button class="button secondary" type="button" data-close-dialog>Cancelar</button>
+      {% if resumo_clonagem %}
+        <button class="button secondary" type="submit" name="acao" value="alterar">Alterar períodos</button>
+        {% if resumo_clonagem.quantidade_origem > 0 %}
+          {% if resumo_clonagem.quantidade_destino > 0 %}
+            <button class="button secondary danger" type="submit" name="acao" value="completa">Substituir e clonar tudo</button>
+            <button class="button" type="submit" name="acao" value="parcial"{% if resumo_clonagem.quantidade_faltantes == 0 %} disabled aria-disabled="true" title="Todas as categorias e âmbitos da origem já existem no destino"{% endif %}>Clonar somente faltantes</button>
+          {% else %}
+            <button class="button" type="submit" name="acao" value="completa">Clonar período</button>
+          {% endif %}
+        {% endif %}
+      {% else %}
+        <button class="button" type="submit" name="acao" value="revisar">Continuar</button>
+      {% endif %}
+    </div>
+  </form>
+</section>
+{% endblock %}

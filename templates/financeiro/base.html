@@ -44,7 +44,7 @@
       <a href="{% url 'eventos' %}"{% if request.resolver_match.url_name == 'eventos' or request.resolver_match.url_name == 'evento_novo' and request.GET.return_to == 'eventos' or request.resolver_match.url_name == 'evento_editar' or request.resolver_match.url_name == 'parcela_cartao_editar' and request.GET.return_to == 'eventos' or request.resolver_match.url_name == 'parcela_lancamento_excluir' %} class="active" aria-current="page"{% endif %}><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"></path><circle cx="18" cy="17" r="2"></circle></svg><span>Lançamentos</span></a>
       <a href="{% url 'cartoes_faturas' %}"{% if request.resolver_match.url_name == 'cartoes_faturas' or request.resolver_match.url_name == 'compra_cartao_nova' or request.resolver_match.url_name == 'parcela_cartao_editar' and request.GET.return_to != 'eventos' %} class="active" aria-current="page"{% endif %}><svg aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M3 10h18M7 15h3"></path></svg><span>Cartões e faturas</span></a>
       <a href="{% url 'parcelas' %}"{% if request.resolver_match.url_name == 'parcelas' %} class="active" aria-current="page"{% endif %}><svg aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"></rect><path d="M8 3v4M16 3v4M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"></path></svg><span>Parcelas futuras</span></a>
-      <a href="{% url 'orcamentos' %}"{% if request.resolver_match.url_name == 'orcamentos' or request.resolver_match.url_name == 'orcamento_novo' or request.resolver_match.url_name == 'orcamento_editar' or request.resolver_match.url_name == 'orcamento_clonar' %} class="active" aria-current="page"{% endif %}><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"></path></svg><span>Orçamentos</span></a>
+      <a href="{% url 'orcamentos' %}"{% if request.resolver_match.url_name == 'orcamentos' or request.resolver_match.url_name == 'orcamento_novo' or request.resolver_match.url_name == 'orcamento_editar' or request.resolver_match.url_name == 'orcamento_clonar' or request.resolver_match.url_name == 'orcamentos_clonar_periodo' or request.resolver_match.url_name == 'orcamentos_importar_despesas' %} class="active" aria-current="page"{% endif %}><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"></path></svg><span>Orçamentos</span></a>
       <a href="{% url 'importar_ofx' %}"{% if request.resolver_match.url_name == 'importar_ofx' or request.resolver_match.url_name == 'importacao_revisao' or request.resolver_match.url_name == 'importacao_resultado' %} class="active" aria-current="page"{% endif %}><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M4 20h16"></path></svg><span>Importação</span></a>
       <details class="nav-group{% if request.resolver_match.url_name == 'contas' or request.resolver_match.url_name == 'conta_nova' or request.resolver_match.url_name == 'conta_editar' or request.resolver_match.url_name == 'cartoes' or request.resolver_match.url_name == 'cartao_novo' or request.resolver_match.url_name == 'cartao_editar' or request.resolver_match.url_name == 'categorias' or request.resolver_match.url_name == 'categoria_nova' or request.resolver_match.url_name == 'categoria_editar' or request.resolver_match.url_name == 'pessoas' or request.resolver_match.url_name == 'pessoa_nova' or request.resolver_match.url_name == 'pessoa_editar' or request.resolver_match.url_name == 'regras_categoria' or request.resolver_match.url_name == 'regra_categoria_nova' or request.resolver_match.url_name == 'regra_categoria_editar' %} active{% endif %}"{% if request.resolver_match.url_name == 'contas' or request.resolver_match.url_name == 'conta_nova' or request.resolver_match.url_name == 'conta_editar' or request.resolver_match.url_name == 'cartoes' or request.resolver_match.url_name == 'cartao_novo' or request.resolver_match.url_name == 'cartao_editar' or request.resolver_match.url_name == 'categorias' or request.resolver_match.url_name == 'categoria_nova' or request.resolver_match.url_name == 'categoria_editar' or request.resolver_match.url_name == 'pessoas' or request.resolver_match.url_name == 'pessoa_nova' or request.resolver_match.url_name == 'pessoa_editar' or request.resolver_match.url_name == 'regras_categoria' or request.resolver_match.url_name == 'regra_categoria_nova' or request.resolver_match.url_name == 'regra_categoria_editar' %} open{% endif %}>
         <summary class="nav-group-summary"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7h16M6 7V4h12v3M5 7l1 13h12l1-13M9 11v5M15 11v5"></path></svg><span>Cadastros</span><svg class="nav-group-chevron" aria-hidden="true" viewBox="0 0 24 24"><path d="m7 10 5 5 5-5"></path></svg></summary>
@@ -640,6 +640,14 @@
           const match = value.match(/^(\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/);
           return match ? `${match[3]}/${match[2]}/${match[1]}` : '';
         };
+        native.value = toNative(visible.value.trim());
+        if (kind === 'month') {
+          visible.addEventListener('input', () => {
+            const digits = visible.value.replace(/\D/g, '').slice(0, 6);
+            visible.value = [digits.slice(0, 2), digits.slice(2, 6)].filter(Boolean).join('/');
+            native.value = toNative(visible.value);
+          });
+        }
         button.addEventListener('click', () => {
           native.value = toNative(visible.value.trim());
           if (typeof native.showPicker === 'function') native.showPicker();
@@ -665,9 +673,13 @@
         event.preventDefault();
         startFormLoading(form);
         try {
+          const formData = new FormData(form);
+          if (event.submitter?.name) {
+            formData.set(event.submitter.name, event.submitter.value);
+          }
           const response = await fetch(form.action || window.location.href, {
             method: form.method || 'post',
-            body: new FormData(form),
+            body: formData,
             headers: {'X-Requested-With': 'XMLHttpRequest'},
           });
           const html = await response.text();

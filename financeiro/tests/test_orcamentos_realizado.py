@@ -1,8 +1,10 @@
 from datetime import date
 from decimal import Decimal
+from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
 
 from django.contrib.auth import get_user_model
+from django.db import IntegrityError
 from django.test import TestCase
 from django.urls import reverse
 
@@ -22,10 +24,16 @@ from financeiro.models import (
     Situacao,
 )
 from financeiro.services.orcamentos import (
+    IMPORTACAO_COMPLETA,
+    IMPORTACAO_PARCIAL,
+    ImportacaoDespesasOrcamentoInvalida,
     _faixa_percentual,
     _percentual_realizado,
     alertas_orcamento_dashboard,
+    consolidar_despesas_para_orcamento,
     enriquecer_orcamentos_com_realizado,
+    importar_despesas_para_orcamento,
+    previsualizar_importacao_despesas,
     resumir_orcamento_dashboard,
 )
 from financeiro.services.detalhamento_dashboard import consultar_detalhamento_dashboard
@@ -153,6 +161,218 @@ class RealizacaoOrcamentosTests(TestCase):
         self.assertEqual(orcamento.percentual_realizado, Decimal("46.00"))
         self.assertEqual(orcamento.percentual_css, "46.00")
         self.assertEqual(orcamento.faixa_percentual, "blue")
+
+    def test_importacao_consolida_base_do_realizado_e_contabiliza_ignorados(self):
+        self.movimento("100.00", categoria=self.filha)
+        self.parcela("30.00", categoria=self.neta)
+        self.movimento("20.00", categoria=self.neta, natureza=NaturezaEvento.ESTORNO)
+        self.movimento("50.00", categoria=self.filha, ambito=Ambito.PROFISSIONAL)
+        self.movimento("80.00", categoria=self.nao_computavel)
+        self.movimento("60.00", categoria=self.filha, natureza=NaturezaEvento.PAGAMENTO_FATURA)
+        self.movimento("70.00", categoria=self.filha, natureza=NaturezaEvento.TRANSFERENCIA)
+        self.movimento("25.00")
+
+        categoria_inativa = Categoria.objects.create(
+            usuario=self.usuario,
+            nome="Categoria inativa",
+            ativa=False,
+        )
+        filha_inativa = Categoria.objects.create(
+            usuario=self.usuario,
+            nome="Filha inativa",
+            categoria_pai=categoria_inativa,
+        )
+        self.movimento("40.00", categoria=filha_inativa)
+
+        categoria_zerada = Categoria.objects.create(usuario=self.usuario, nome="Categoria zerada")
+        filha_zerada = Categoria.objects.create(
+            usuario=self.usuario,
+            nome="Filha zerada",
+            categoria_pai=categoria_zerada,
+        )
+        self.movimento("35.00", categoria=filha_zerada)
+        self.movimento("35.00", categoria=filha_zerada, natureza=NaturezaEvento.ESTORNO)
+
+        conta_outro = Conta.objects.create(usuario=self.outro_usuario, nome="Conta externa")
+        categoria_outro = Categoria.objects.create(usuario=self.outro_usuario, nome="Categoria externa")
+        self.movimento(
+            "900.00",
+            categoria=categoria_outro,
+            usuario=self.outro_usuario,
+            conta=conta_outro,
+        )
+
+        resumo = consolidar_despesas_para_orcamento(self.usuario, "2026-10")
+
+        self.assertEqual(
+            {(item["categoria_id"], item["ambito"], item["valor"]) for item in resumo["itens"]},
+            {
+                (self.categoria.pk, Ambito.PESSOAL, Decimal("110.00")),
+                (self.categoria.pk, Ambito.PROFISSIONAL, Decimal("50.00")),
+            },
+        )
+        self.assertEqual(resumo["quantidade_importavel"], 2)
+        self.assertEqual(resumo["valor_importavel"], Decimal("160.00"))
+        self.assertEqual(resumo["quantidade_ignorados"], 3)
+        self.assertEqual(resumo["ignorados"]["sem_categoria"]["quantidade"], 1)
+        self.assertEqual(resumo["ignorados"]["categoria_inativa"]["quantidade"], 1)
+        self.assertEqual(resumo["ignorados"]["nao_positivos"]["quantidade"], 1)
+
+    def test_previa_e_importacao_completa_substituem_somente_destino_do_usuario(self):
+        self.movimento("100.00", categoria=self.filha)
+        self.movimento("50.00", categoria=self.neta, ambito=Ambito.PROFISSIONAL)
+        antigo = Orcamento.objects.create(
+            usuario=self.usuario,
+            categoria=self.categoria,
+            mes="2026-11",
+            ambito=Ambito.PESSOAL,
+            limite="999.00",
+        )
+        categoria_outro = Categoria.objects.create(usuario=self.outro_usuario, nome="Categoria externa")
+        alheio = Orcamento.objects.create(
+            usuario=self.outro_usuario,
+            categoria=categoria_outro,
+            mes="2026-11",
+            ambito=Ambito.PESSOAL,
+            limite="888.00",
+        )
+
+        previa = previsualizar_importacao_despesas(self.usuario, "2026-10", "2026-11")
+        resultado = importar_despesas_para_orcamento(
+            self.usuario,
+            "2026-10",
+            "2026-11",
+            IMPORTACAO_COMPLETA,
+        )
+
+        self.assertEqual(previa["quantidade_destino"], 1)
+        self.assertEqual(previa["quantidade_faltantes"], 1)
+        self.assertEqual(resultado["incluidos"], 2)
+        self.assertEqual(resultado["substituidos"], 1)
+        self.assertFalse(Orcamento.objects.filter(pk=antigo.pk).exists())
+        self.assertTrue(Orcamento.objects.filter(pk=alheio.pk).exists())
+        self.assertEqual(
+            set(
+                Orcamento.objects.filter(usuario=self.usuario, mes="2026-11").values_list(
+                    "categoria_id", "ambito", "limite"
+                )
+            ),
+            {
+                (self.categoria.pk, Ambito.PESSOAL, Decimal("100.00")),
+                (self.categoria.pk, Ambito.PROFISSIONAL, Decimal("50.00")),
+            },
+        )
+
+    def test_importacao_parcial_preserva_existentes_e_usa_categoria_mais_ambito(self):
+        self.movimento("100.00", categoria=self.filha)
+        self.movimento("50.00", categoria=self.neta, ambito=Ambito.PROFISSIONAL)
+        existente = Orcamento.objects.create(
+            usuario=self.usuario,
+            categoria=self.categoria,
+            mes="2026-11",
+            ambito=Ambito.PESSOAL,
+            limite="999.00",
+        )
+
+        resultado = importar_despesas_para_orcamento(
+            self.usuario,
+            "2026-10",
+            "2026-11",
+            IMPORTACAO_PARCIAL,
+        )
+
+        existente.refresh_from_db()
+        self.assertEqual(existente.limite, Decimal("999.00"))
+        self.assertEqual(resultado["incluidos"], 1)
+        self.assertEqual(resultado["preservados"], 1)
+        self.assertTrue(
+            Orcamento.objects.filter(
+                usuario=self.usuario,
+                categoria=self.categoria,
+                mes="2026-11",
+                ambito=Ambito.PROFISSIONAL,
+                limite="50.00",
+            ).exists()
+        )
+
+    def test_confirmacao_da_importacao_recalcula_as_despesas(self):
+        self.movimento("100.00", categoria=self.filha)
+        previa = previsualizar_importacao_despesas(self.usuario, "2026-10", "2026-11")
+        self.assertEqual(previa["valor_importavel"], Decimal("100.00"))
+        self.movimento("25.00", categoria=self.neta)
+
+        importar_despesas_para_orcamento(
+            self.usuario,
+            "2026-10",
+            "2026-11",
+            IMPORTACAO_COMPLETA,
+        )
+
+        criado = Orcamento.objects.get(
+            usuario=self.usuario,
+            categoria=self.categoria,
+            mes="2026-11",
+            ambito=Ambito.PESSOAL,
+        )
+        self.assertEqual(criado.limite, Decimal("125.00"))
+
+    @patch("financeiro.services.orcamentos.timezone.localdate", return_value=date(2026, 10, 22))
+    def test_importacao_rejeita_origem_futura_destino_nao_posterior_e_sem_despesas(self, _localdate):
+        with self.assertRaisesMessage(
+            ImportacaoDespesasOrcamentoInvalida,
+            "não pode ser posterior ao mês atual",
+        ):
+            importar_despesas_para_orcamento(
+                self.usuario,
+                "2026-11",
+                "2026-12",
+                IMPORTACAO_COMPLETA,
+            )
+        with self.assertRaisesMessage(
+            ImportacaoDespesasOrcamentoInvalida,
+            "deve ser posterior",
+        ):
+            importar_despesas_para_orcamento(
+                self.usuario,
+                "2026-10",
+                "2026-10",
+                IMPORTACAO_COMPLETA,
+            )
+        with self.assertRaisesMessage(
+            ImportacaoDespesasOrcamentoInvalida,
+            "Nenhuma despesa elegível",
+        ):
+            importar_despesas_para_orcamento(
+                self.usuario,
+                "2026-09",
+                "2026-10",
+                IMPORTACAO_COMPLETA,
+            )
+
+    def test_importacao_completa_faz_rollback_se_a_criacao_falhar(self):
+        self.movimento("100.00", categoria=self.filha)
+        destino = Orcamento.objects.create(
+            usuario=self.usuario,
+            categoria=self.categoria,
+            mes="2026-11",
+            ambito=Ambito.PESSOAL,
+            limite="999.00",
+        )
+
+        with patch(
+            "financeiro.services.orcamentos.Orcamento.objects.bulk_create",
+            side_effect=IntegrityError("conflito simulado"),
+        ):
+            with self.assertRaises(IntegrityError):
+                importar_despesas_para_orcamento(
+                    self.usuario,
+                    "2026-10",
+                    "2026-11",
+                    IMPORTACAO_COMPLETA,
+                )
+
+        destino.refresh_from_db()
+        self.assertEqual(destino.limite, Decimal("999.00"))
 
     def test_exclui_conta_nao_realizada_outro_ambito_periodo_e_usuario(self):
         self.movimento("40.00", categoria=self.filha)

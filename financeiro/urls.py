@@ -24,6 +24,12 @@ urlpatterns = [
     path("cartoes/<int:pk>/editar/", views.CartaoUpdateView.as_view(), name="cartao_editar"),
     path("parcelas/", views.parcelas_futuras, name="parcelas"),
     path("orcamentos/", views.OrcamentoListView.as_view(), name="orcamentos"),
+    path("orcamentos/clonar-periodo/", views.clonar_periodo_orcamentos_view, name="orcamentos_clonar_periodo"),
+    path(
+        "orcamentos/importar-despesas/",
+        views.importar_despesas_orcamento_view,
+        name="orcamentos_importar_despesas",
+    ),
     path("orcamentos/novo/", views.OrcamentoCreateView.as_view(), name="orcamento_novo"),
     path("orcamentos/<int:pk>/editar/", views.OrcamentoUpdateView.as_view(), name="orcamento_editar"),
     path("orcamentos/<int:pk>/clonar/", views.OrcamentoCloneView.as_view(), name="orcamento_clonar"),

@@ -6,14 +6,105 @@ from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 from urllib.parse import urlencode
 
+from django.db import transaction
 from django.urls import reverse
+from django.utils import timezone
 
-from financeiro.models import Orcamento
+from financeiro.models import Categoria, Orcamento
 from financeiro.services.dashboard import carregar_contribuicoes_dashboard
 
 
 ZERO = Decimal("0.00")
 HUNDRED = Decimal("100.00")
+CLONAGEM_COMPLETA = "completa"
+CLONAGEM_PARCIAL = "parcial"
+IMPORTACAO_COMPLETA = "completa"
+IMPORTACAO_PARCIAL = "parcial"
+
+
+class ClonagemPeriodoOrcamentoInvalida(ValueError):
+    pass
+
+
+class ImportacaoDespesasOrcamentoInvalida(ValueError):
+    pass
+
+
+def _chave_orcamento(orcamento: Orcamento) -> tuple[int, str]:
+    return orcamento.categoria_id, orcamento.ambito
+
+
+def previsualizar_clonagem_periodo(usuario, mes_origem: str, mes_destino: str) -> dict:
+    origem = set(
+        Orcamento.objects.filter(usuario=usuario, mes=mes_origem).values_list("categoria_id", "ambito")
+    )
+    destino = set(
+        Orcamento.objects.filter(usuario=usuario, mes=mes_destino).values_list("categoria_id", "ambito")
+    )
+    return {
+        "mes_origem": mes_origem,
+        "mes_destino": mes_destino,
+        "quantidade_origem": len(origem),
+        "quantidade_destino": len(destino),
+        "quantidade_faltantes": len(origem - destino),
+        "quantidade_ja_existentes": len(origem & destino),
+    }
+
+
+@transaction.atomic
+def clonar_periodo_orcamentos(usuario, mes_origem: str, mes_destino: str, modo: str) -> dict:
+    if mes_origem == mes_destino:
+        raise ClonagemPeriodoOrcamentoInvalida(
+            "O período de destino deve ser diferente do período de origem."
+        )
+    if modo not in {CLONAGEM_COMPLETA, CLONAGEM_PARCIAL}:
+        raise ClonagemPeriodoOrcamentoInvalida("Escolha uma opção válida de clonagem.")
+
+    orcamentos = list(
+        Orcamento.objects.select_for_update()
+        .filter(usuario=usuario, mes__in=[mes_origem, mes_destino])
+        .order_by("id")
+    )
+    origem = [orcamento for orcamento in orcamentos if orcamento.mes == mes_origem]
+    destino = [orcamento for orcamento in orcamentos if orcamento.mes == mes_destino]
+    if not origem:
+        raise ClonagemPeriodoOrcamentoInvalida(
+            "Nenhum orçamento foi encontrado no período de origem."
+        )
+
+    if modo == CLONAGEM_COMPLETA:
+        ids_destino = [orcamento.pk for orcamento in destino]
+        if ids_destino:
+            Orcamento.objects.filter(pk__in=ids_destino, usuario=usuario).delete()
+        selecionados = origem
+    else:
+        chaves_destino = {_chave_orcamento(orcamento) for orcamento in destino}
+        selecionados = [
+            orcamento for orcamento in origem if _chave_orcamento(orcamento) not in chaves_destino
+        ]
+        if not selecionados:
+            raise ClonagemPeriodoOrcamentoInvalida(
+                "Todas as categorias e âmbitos da origem já existem no período de destino."
+            )
+
+    novos = [
+        Orcamento(
+            usuario=usuario,
+            categoria_id=orcamento.categoria_id,
+            mes=mes_destino,
+            ambito=orcamento.ambito,
+            limite=orcamento.limite,
+        )
+        for orcamento in selecionados
+    ]
+    Orcamento.objects.bulk_create(novos)
+    return {
+        "modo": modo,
+        "copiados": len(novos),
+        "substituidos": len(destino) if modo == CLONAGEM_COMPLETA else 0,
+        "preservados": len(destino) if modo == CLONAGEM_PARCIAL else 0,
+        "ignorados": len(origem) - len(novos),
+    }
 
 
 def _limites_meses(meses: set[str]) -> tuple[date, date]:
@@ -46,6 +137,165 @@ def _chave_contribuicao(contribuicao, categorias: dict) -> tuple[str, int | None
         competencia = contribuicao.registro.vencimento.strftime("%Y-%m")
         ambito = contribuicao.registro.ambito_exibicao
     return competencia, _categoria_superior_id(contribuicao.categoria, categorias), ambito
+
+
+def _consolidar_realizados(usuario, meses: set[str]) -> tuple[dict, dict]:
+    data_inicial, data_final = _limites_meses(meses)
+    dados = carregar_contribuicoes_dashboard(
+        usuario,
+        date_from=data_inicial,
+        date_to=data_final,
+    )
+    realizados = defaultdict(lambda: ZERO)
+    for contribuicao in dados["contribuicoes"]:
+        valor = contribuicao.valor_indicador
+        if valor == ZERO:
+            continue
+        chave = _chave_contribuicao(contribuicao, dados["categorias"])
+        if chave[0] in meses:
+            realizados[chave] += valor
+    return realizados, dados["categorias"]
+
+
+def consolidar_despesas_para_orcamento(usuario, mes_despesas: str) -> dict:
+    realizados, categorias = _consolidar_realizados(usuario, {mes_despesas})
+    itens = []
+    ignorados = {
+        "sem_categoria": {"quantidade": 0, "valor": ZERO},
+        "categoria_inativa": {"quantidade": 0, "valor": ZERO},
+        "nao_positivos": {"quantidade": 0, "valor": ZERO},
+    }
+    rotulos_ambito = dict(Orcamento._meta.get_field("ambito").choices)
+
+    for (_, categoria_id, ambito), valor_bruto in realizados.items():
+        valor = valor_bruto.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        if categoria_id is None:
+            motivo = "sem_categoria"
+        else:
+            categoria = categorias.get(categoria_id)
+            if (
+                not categoria
+                or not categoria.ativa
+                or categoria.tipo != Categoria.Tipo.DESPESA
+                or categoria.categoria_pai_id is not None
+            ):
+                motivo = "categoria_inativa"
+            elif valor <= ZERO:
+                motivo = "nao_positivos"
+            else:
+                itens.append(
+                    {
+                        "categoria_id": categoria_id,
+                        "categoria_nome": categoria.nome,
+                        "ambito": ambito,
+                        "ambito_rotulo": rotulos_ambito.get(ambito, ambito),
+                        "valor": valor,
+                    }
+                )
+                continue
+        ignorados[motivo]["quantidade"] += 1
+        ignorados[motivo]["valor"] += valor
+
+    itens.sort(key=lambda item: (item["categoria_nome"].casefold(), item["ambito"]))
+    for resumo in ignorados.values():
+        resumo["valor"] = resumo["valor"].quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    return {
+        "mes_despesas": mes_despesas,
+        "itens": itens,
+        "quantidade_importavel": len(itens),
+        "valor_importavel": sum((item["valor"] for item in itens), ZERO).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        ),
+        "quantidade_ignorados": sum(item["quantidade"] for item in ignorados.values()),
+        "ignorados": ignorados,
+    }
+
+
+def previsualizar_importacao_despesas(usuario, mes_despesas: str, mes_destino: str) -> dict:
+    resumo = consolidar_despesas_para_orcamento(usuario, mes_despesas)
+    origem = {(item["categoria_id"], item["ambito"]) for item in resumo["itens"]}
+    destino = set(
+        Orcamento.objects.filter(usuario=usuario, mes=mes_destino).values_list(
+            "categoria_id", "ambito"
+        )
+    )
+    return {
+        **resumo,
+        "mes_destino": mes_destino,
+        "quantidade_destino": len(destino),
+        "quantidade_faltantes": len(origem - destino),
+        "quantidade_ja_existentes": len(origem & destino),
+    }
+
+
+@transaction.atomic
+def importar_despesas_para_orcamento(
+    usuario,
+    mes_despesas: str,
+    mes_destino: str,
+    modo: str,
+) -> dict:
+    mes_atual = timezone.localdate().strftime("%Y-%m")
+    if mes_despesas > mes_atual:
+        raise ImportacaoDespesasOrcamentoInvalida(
+            "O período das despesas não pode ser posterior ao mês atual."
+        )
+    if mes_destino <= mes_despesas:
+        raise ImportacaoDespesasOrcamentoInvalida(
+            "O período de destino deve ser posterior ao período das despesas."
+        )
+    if modo not in {IMPORTACAO_COMPLETA, IMPORTACAO_PARCIAL}:
+        raise ImportacaoDespesasOrcamentoInvalida("Escolha uma opção válida de importação.")
+
+    resumo = consolidar_despesas_para_orcamento(usuario, mes_despesas)
+    if not resumo["itens"]:
+        raise ImportacaoDespesasOrcamentoInvalida(
+            "Nenhuma despesa elegível foi encontrada no período informado."
+        )
+
+    destino = list(
+        Orcamento.objects.select_for_update()
+        .filter(usuario=usuario, mes=mes_destino)
+        .order_by("id")
+    )
+    chaves_destino = {_chave_orcamento(orcamento) for orcamento in destino}
+    if modo == IMPORTACAO_COMPLETA:
+        ids_destino = [orcamento.pk for orcamento in destino]
+        if ids_destino:
+            Orcamento.objects.filter(usuario=usuario, pk__in=ids_destino).delete()
+        selecionados = resumo["itens"]
+    else:
+        selecionados = [
+            item
+            for item in resumo["itens"]
+            if (item["categoria_id"], item["ambito"]) not in chaves_destino
+        ]
+        if not selecionados:
+            raise ImportacaoDespesasOrcamentoInvalida(
+                "Todas as categorias e âmbitos importáveis já existem no período de destino."
+            )
+
+    novos = [
+        Orcamento(
+            usuario=usuario,
+            categoria_id=item["categoria_id"],
+            mes=mes_destino,
+            ambito=item["ambito"],
+            limite=item["valor"],
+        )
+        for item in selecionados
+    ]
+    Orcamento.objects.bulk_create(novos)
+    return {
+        "modo": modo,
+        "incluidos": len(novos),
+        "substituidos": len(destino) if modo == IMPORTACAO_COMPLETA else 0,
+        "preservados": len(destino) if modo == IMPORTACAO_PARCIAL else 0,
+        "ignorados": resumo["quantidade_ignorados"] + len(resumo["itens"]) - len(novos),
+        "valor_importado": sum((item["valor"] for item in selecionados), ZERO).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        ),
+    }
 
 
 def _percentual_realizado(realizado: Decimal, limite: Decimal) -> Decimal | None:
@@ -117,17 +367,7 @@ def enriquecer_orcamentos_com_realizado(usuario, orcamentos: list[Orcamento]) ->
         return orcamentos
 
     meses = {orcamento.mes for orcamento in orcamentos}
-    data_inicial, data_final = _limites_meses(meses)
-    dados = carregar_contribuicoes_dashboard(
-        usuario,
-        date_from=data_inicial,
-        date_to=data_final,
-    )
-    realizados = defaultdict(lambda: ZERO)
-    for contribuicao in dados["contribuicoes"]:
-        chave = _chave_contribuicao(contribuicao, dados["categorias"])
-        if chave[0] in meses:
-            realizados[chave] += contribuicao.valor_indicador
+    realizados, _ = _consolidar_realizados(usuario, meses)
 
     for orcamento in orcamentos:
         chave = (orcamento.mes, orcamento.categoria_id, orcamento.ambito)

@@ -3,7 +3,7 @@
 {% block title %}Visão geral | My App Financeiro{% endblock %}
 {% block content %}
 <style>
-  .overview-page{max-width:1600px}.overview-page .top{margin-bottom:22px}.overview-period{display:flex;align-items:end;gap:12px}.overview-period label{display:grid;gap:5px;font-size:14px}.overview-period input{width:140px}.overview-values-toggle{margin-bottom:1px;color:var(--muted)}
+  .overview-page{max-width:1600px}.overview-page .top{margin-bottom:22px}.overview-period{display:flex;align-items:end;gap:12px}.overview-period label{display:grid;gap:5px;font-size:14px}.overview-period input{width:140px}.overview-date-control{width:140px}.overview-values-toggle{margin-bottom:1px;color:var(--muted)}
   .overview-filters{background:#fff;border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:22px}.overview-filter-grid{display:grid;grid-template-columns:repeat(2,minmax(180px,1fr)) auto;gap:12px;align-items:end}.overview-filter-grid label,.analysis-filter label{display:grid;gap:5px;font-size:14px}.overview-filter-grid .secondary{justify-self:end}.overview-filter-note{font-size:14px;color:var(--muted);margin:10px 0 0}
   .overview-heading{display:flex;justify-content:space-between;align-items:center;gap:16px;margin:0 0 18px}.overview-heading h2{margin:0}.overview-page .kpis{margin-bottom:22px}.overview-page .card .label{font-size:14px;color:var(--muted)}.overview-page .value{letter-spacing:-.7px}
   .overview-grid{display:grid;grid-template-columns:1.2fr 1fr;gap:22px}.overview-grid.equal{grid-template-columns:1fr 1fr}.overview-grid.three{grid-template-columns:repeat(3,1fr)}.overview-section{margin-top:22px}.overview-section:first-of-type{margin-top:0}.overview-empty{color:var(--muted);font-size:14px;margin:10px 0}.overview-helper{font-size:14px;color:var(--muted);margin:15px 0 0}
@@ -19,7 +19,7 @@
   .dashboard-detail-dialog{max-width:1240px;width:calc(100% - 32px);padding:0;overflow:hidden}.dashboard-detail-dialog .dialog-head{padding:20px 24px;margin:0;border-bottom:1px solid var(--line)}.dashboard-detail-body{padding:22px 24px;max-height:calc(90vh - 78px);overflow:auto}.dashboard-detail-loading{display:flex;align-items:center;justify-content:center;gap:12px;min-height:180px;color:var(--muted)}.dashboard-detail-summary{display:flex;justify-content:space-between;align-items:start;gap:20px;margin-bottom:18px}.dashboard-detail-summary h3{font-size:22px;margin:4px 0}.dashboard-detail-summary p{margin:0}.dashboard-detail-total{text-align:right;display:grid;gap:4px}.dashboard-detail-total strong{font-size:22px;white-space:nowrap}.dashboard-detail-actions{display:flex;justify-content:flex-end;margin-top:20px}.dashboard-detail-dialog .transactions-count{margin:0 0 10px}.dashboard-detail-dialog .transactions-table-wrap{overflow-x:auto}.dashboard-detail-dialog .transactions-table{min-width:850px}.dashboard-detail-dialog .transactions-table td:first-child,.dashboard-detail-dialog .transactions-table .money{white-space:nowrap}.dashboard-detail-dialog .transactions-table .description{min-width:250px;max-width:430px;overflow-wrap:anywhere}.dashboard-detail-dialog .transactions-table .source-name,.dashboard-detail-dialog .transactions-table .category-cell{min-width:170px}.dashboard-detail-dialog .transactions-table .pill{display:inline-block;margin-top:5px;background:#edf2fa;color:var(--blue)}.dashboard-detail-dialog .transactions-table .transaction-main-row.has-observation td{border-bottom:0;padding-bottom:5px}.dashboard-detail-dialog .transactions-table .transaction-observation-row td{padding-top:0}.dashboard-detail-dialog .transactions-table .transaction-observation{color:var(--muted);font-size:14px;white-space:pre-wrap;overflow-wrap:anywhere}.dashboard-detail-dialog .transactions-table .transaction-observation strong{color:var(--ink)}.dashboard-detail-dialog .transactions-table .empty{padding:28px;text-align:center;color:var(--muted)}.dashboard-detail-error{min-height:180px;display:grid;place-items:center;text-align:center}.dashboard-detail-error p{color:var(--muted)}
   .position-panel-head{margin-bottom:8px}.position-list{display:grid;gap:12px}.position-item{padding:14px;background:#f7f9fc;border:1px solid var(--line);border-radius:9px}.position-item h3{font-size:16px;margin:0}.position-item .source{margin-top:3px}.position-values{display:grid;gap:8px;margin-top:13px}.position-value{display:flex;justify-content:space-between;gap:14px;font-size:14px}.position-value strong{white-space:nowrap}.credit-card-item{padding:14px 0;border-bottom:1px solid var(--line)}.credit-card-item:first-of-type{padding-top:4px}.credit-card-item:last-child{padding-bottom:0;border-bottom:0}.credit-card-head{display:flex;justify-content:space-between;gap:14px;align-items:start}.credit-card-head h3{font-size:16px;margin:0}.credit-limit-values{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 14px;margin:13px 0}.credit-limit-values .small{display:block}.credit-limit-bar{height:14px;background:#eef2f8;border-radius:10px;overflow:hidden}.credit-limit-bar>span{display:block;height:100%;background:#2769d8;border-radius:10px}.credit-limit-status{display:flex;justify-content:space-between;gap:14px;align-items:center;margin-top:7px;font-size:14px}.credit-limit-status strong{white-space:nowrap}.limit-alert{font-size:13px;color:var(--danger);margin:9px 0 0}.limit-note{font-size:13px;color:var(--muted);margin:8px 0 0}
   @media(max-width:1100px){.overview-filter-grid{grid-template-columns:1fr 1fr}.overview-filter-grid .secondary{grid-column:1/-1;justify-self:start}.overview-grid,.overview-grid.equal,.overview-grid.three{grid-template-columns:1fr}.commitment-cards{grid-template-columns:repeat(2,minmax(0,1fr))}.cash-grid{grid-template-columns:repeat(3,1fr)}}
-  @media(max-width:700px){.overview-period{width:100%;display:grid;grid-template-columns:1fr 1fr}.overview-period input{width:100%}.overview-filter-grid{grid-template-columns:1fr}.overview-filter-grid .secondary{grid-column:auto;width:100%;text-align:center}.overview-heading{align-items:stretch;flex-direction:column}.overview-heading .button{justify-content:center}.overview-page .kpis{gap:10px}.overview-page .card,.overview-page .panel{padding:16px}.overview-page .collapsible-panel{padding:0}.overview-page .value{font-size:23px}.bar-label{font-size:13px}.commitment-cards,.cash-grid,.budget-list{grid-template-columns:1fr}.evolution-row{grid-template-columns:45px 1fr}.dashboard-detail-dialog{width:calc(100% - 16px)}.dashboard-detail-dialog .dialog-head,.dashboard-detail-body{padding:16px}.dashboard-detail-summary{display:grid}.dashboard-detail-total{text-align:left}}
+  @media(max-width:700px){.overview-period{width:100%;display:grid;grid-template-columns:1fr 1fr}.overview-period input,.overview-date-control{width:100%}.overview-filter-grid{grid-template-columns:1fr}.overview-filter-grid .secondary{grid-column:auto;width:100%;text-align:center}.overview-heading{align-items:stretch;flex-direction:column}.overview-heading .button{justify-content:center}.overview-page .kpis{gap:10px}.overview-page .card,.overview-page .panel{padding:16px}.overview-page .collapsible-panel{padding:0}.overview-page .value{font-size:23px}.bar-label{font-size:13px}.commitment-cards,.cash-grid,.budget-list{grid-template-columns:1fr}.evolution-row{grid-template-columns:45px 1fr}.dashboard-detail-dialog{width:calc(100% - 16px)}.dashboard-detail-dialog .dialog-head,.dashboard-detail-body{padding:16px}.dashboard-detail-summary{display:grid}.dashboard-detail-total{text-align:left}}
 </style>
 
 <div class="overview-page">
@@ -27,8 +27,24 @@
   <header class="top">
     <div><div class="eyebrow">Finanças pessoais e profissionais</div><h1>Visão geral</h1></div>
     <div class="overview-period" aria-label="Período do dashboard">
-      <label for="dateFromFilter">Data inicial<input id="dateFromFilter" name="date_from" form="overviewFilters" value="{{ data_inicial|date:'d/m/Y' }}" placeholder="DD/MM/AAAA" inputmode="numeric" autocomplete="off" data-date-filter></label>
-      <label for="dateToFilter">Data final<input id="dateToFilter" name="date_to" form="overviewFilters" value="{{ data_final|date:'d/m/Y' }}" placeholder="DD/MM/AAAA" inputmode="numeric" autocomplete="off" data-date-filter></label>
+      <label for="dateFromFilter">Data inicial
+        <span class="temporal-control overview-date-control" data-dashboard-date-control>
+          <input id="dateFromFilter" name="date_from" form="overviewFilters" value="{{ data_inicial|date:'d/m/Y' }}" placeholder="DD/MM/AAAA" inputmode="numeric" autocomplete="off" data-date-filter data-date-role="from">
+          <button type="button" data-open-dashboard-date-picker aria-label="Selecionar data inicial no calendário" title="Selecionar data inicial">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3v3M17 3v3M4 9h16M5 5h14a1 1 0 0 1 1 1v14H4V6a1 1 0 0 1 1-1Z"/></svg>
+          </button>
+          <input class="temporal-native" type="date" tabindex="-1" aria-hidden="true" data-dashboard-date-native>
+        </span>
+      </label>
+      <label for="dateToFilter">Data final
+        <span class="temporal-control overview-date-control" data-dashboard-date-control>
+          <input id="dateToFilter" name="date_to" form="overviewFilters" value="{{ data_final|date:'d/m/Y' }}" placeholder="DD/MM/AAAA" inputmode="numeric" autocomplete="off" data-date-filter data-date-role="to">
+          <button type="button" data-open-dashboard-date-picker aria-label="Selecionar data final no calendário" title="Selecionar data final">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3v3M17 3v3M4 9h16M5 5h14a1 1 0 0 1 1 1v14H4V6a1 1 0 0 1 1-1Z"/></svg>
+          </button>
+          <input class="temporal-native" type="date" tabindex="-1" aria-hidden="true" data-dashboard-date-native>
+        </span>
+      </label>
       <button type="button" class="icon-button overview-values-toggle" data-dashboard-values-toggle aria-pressed="false" aria-label="Ocultar valores" title="Ocultar valores">
         <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
       </button>
@@ -348,11 +364,62 @@
       applyValuesVisibility();
     });
     ['accountFilter', 'cardFilter', 'originFilter', 'natureFilter'].forEach((id) => document.getElementById(id)?.addEventListener('change', () => filterForm.requestSubmit()));
-    document.querySelectorAll('[data-date-filter][form="overviewFilters"]').forEach((field) => {
-      field.addEventListener('change', () => filterForm.requestSubmit());
+    const dashboardDateControls = Array.from(document.querySelectorAll('[data-dashboard-date-control]'));
+    const parseDisplayDate = (value) => {
+      const match = value.trim().match(/^(0[1-9]|[12]\d|3[01])\/(0[1-9]|1[0-2])\/(\d{4})$/);
+      if (!match) return null;
+      const parsed = {day: Number(match[1]), month: Number(match[2]), year: Number(match[3])};
+      const candidate = new Date(parsed.year, parsed.month - 1, parsed.day);
+      if (candidate.getFullYear() !== parsed.year || candidate.getMonth() !== parsed.month - 1 || candidate.getDate() !== parsed.day) return null;
+      return parsed;
+    };
+    const padDatePart = (value) => String(value).padStart(2, '0');
+    const toNativeDate = (value) => {
+      const parsed = parseDisplayDate(value);
+      return parsed ? `${parsed.year}-${padDatePart(parsed.month)}-${padDatePart(parsed.day)}` : '';
+    };
+    const toDisplayDate = (value) => {
+      const match = value.match(/^(\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/);
+      if (!match) return '';
+      const displayValue = `${match[3]}/${match[2]}/${match[1]}`;
+      return parseDisplayDate(displayValue) ? displayValue : '';
+    };
+    const syncFinalDateFromInitial = () => {
+      const initial = document.getElementById('dateFromFilter');
+      const final = document.getElementById('dateToFilter');
+      const parsed = parseDisplayDate(initial?.value || '');
+      if (!parsed || !final) return;
+      const lastDay = new Date(parsed.year, parsed.month, 0).getDate();
+      final.value = `${padDatePart(lastDay)}/${padDatePart(parsed.month)}/${parsed.year}`;
+      const finalNative = final.closest('[data-dashboard-date-control]')?.querySelector('[data-dashboard-date-native]');
+      if (finalNative) finalNative.value = toNativeDate(final.value);
+    };
+    dashboardDateControls.forEach((control) => {
+      const field = control.querySelector('[data-date-filter]');
+      const native = control.querySelector('[data-dashboard-date-native]');
+      const button = control.querySelector('[data-open-dashboard-date-picker]');
+      if (!field || !native || !button) return;
+      native.value = toNativeDate(field.value);
+      button.addEventListener('click', () => {
+        native.value = toNativeDate(field.value);
+        if (typeof native.showPicker === 'function') native.showPicker();
+        else native.click();
+      });
+      native.addEventListener('change', () => {
+        const displayValue = toDisplayDate(native.value);
+        if (!displayValue) return;
+        field.value = displayValue;
+        field.dispatchEvent(new Event('change', {bubbles: true}));
+      });
       field.addEventListener('input', () => {
         const digits = field.value.replace(/\D/g, '').slice(0, 8);
         field.value = [digits.slice(0, 2), digits.slice(2, 4), digits.slice(4, 8)].filter(Boolean).join('/');
+        native.value = toNativeDate(field.value);
+      });
+      field.addEventListener('change', () => {
+        if (field.dataset.dateRole === 'from') syncFinalDateFromInitial();
+        native.value = toNativeDate(field.value);
+        filterForm.requestSubmit();
       });
     });
     const formatter = new Intl.NumberFormat('pt-BR', {style:'currency', currency:'BRL'});

@@ -1,0 +1,120 @@
+{% extends "financeiro/base.html" %}
+{% load financeiro_format %}
+{% block title %}{{ titulo }} | My App Financeiro{% endblock %}
+{% block content %}
+<header class="top">
+  <div><div class="eyebrow">Planejamento</div><h1>{{ titulo }}</h1></div>
+</header>
+<section class="panel" data-modal-content>
+  <style>
+    .budget-import-form{grid-template-columns:1fr 1fr}
+    .budget-import-summary{display:grid;gap:10px;padding:14px;border:1px solid var(--line);border-radius:8px;background:#f7f9fc}
+    .budget-import-summary p{margin:0}
+    .budget-import-warning{border-color:#f0c36d;background:#fff8e8;color:#7a4b00}
+    .budget-import-empty{border-color:#bfd3f2;background:#edf3fb;color:var(--ink)}
+    .budget-import-periods{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .budget-import-period{display:grid;gap:3px;padding:12px;background:white;border:1px solid var(--line);border-radius:7px}
+    .budget-import-period span{font-size:13px;color:var(--muted)}
+    .budget-import-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+    .budget-import-metric{display:grid;gap:2px;padding:10px;border:1px solid var(--line);border-radius:7px;background:white}
+    .budget-import-metric span{font-size:13px;color:var(--muted)}
+    .budget-import-ignored{margin:0;padding-left:20px}
+    .budget-import-form button:disabled{cursor:not-allowed}
+    @media(max-width:700px){
+      .budget-import-form,.budget-import-periods,.budget-import-metrics{grid-template-columns:1fr}
+      .budget-import-form .actions{flex-direction:column-reverse}
+      .budget-import-form .actions button{width:100%;justify-content:center}
+    }
+  </style>
+  <form method="post" class="form-grid budget-import-form" action="{{ request.get_full_path }}">
+    {% csrf_token %}
+    {% if resumo_importacao %}
+      <input type="hidden" name="mes_despesas" value="{{ resumo_importacao.mes_despesas }}">
+      <input type="hidden" name="mes_destino" value="{{ resumo_importacao.mes_destino }}">
+      <div class="budget-import-periods wide" aria-label="Períodos revisados">
+        <div class="budget-import-period"><span>Período das despesas</span><strong>{{ resumo_importacao.mes_despesas_rotulo }}</strong></div>
+        <div class="budget-import-period"><span>Período de destino</span><strong>{{ resumo_importacao.mes_destino_rotulo }}</strong></div>
+      </div>
+    {% else %}
+      <p class="field field-mes_despesas">
+        {{ form.mes_despesas.label_tag }}
+        {{ form.mes_despesas.errors }}
+        <span class="temporal-control" data-temporal-control="month">
+          {{ form.mes_despesas }}
+          <button type="button" data-open-temporal-picker aria-label="Abrir seletor do período das despesas">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3v3M17 3v3M4 9h16M5 5h14a1 1 0 0 1 1 1v14H4V6a1 1 0 0 1 1-1Z"/></svg>
+          </button>
+          <input class="temporal-native" type="month" tabindex="-1" aria-hidden="true">
+        </span>
+      </p>
+      <p class="field field-mes_destino">
+        {{ form.mes_destino.label_tag }}
+        {{ form.mes_destino.errors }}
+        <span class="temporal-control" data-temporal-control="month">
+          {{ form.mes_destino }}
+          <button type="button" data-open-temporal-picker aria-label="Abrir seletor do período de destino">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3v3M17 3v3M4 9h16M5 5h14a1 1 0 0 1 1 1v14H4V6a1 1 0 0 1 1-1Z"/></svg>
+          </button>
+          <input class="temporal-native" type="month" tabindex="-1" aria-hidden="true">
+        </span>
+      </p>
+    {% endif %}
+
+    {% if form.non_field_errors %}
+      <div class="form-error wide" role="alert">{{ form.non_field_errors }}</div>
+    {% endif %}
+
+    {% if resumo_importacao %}
+      {% if resumo_importacao.quantidade_importavel == 0 %}
+        <div class="budget-import-summary budget-import-empty wide" role="status">
+          <p>Nenhuma despesa elegível foi encontrada em {{ resumo_importacao.mes_despesas_rotulo }}.</p>
+          <p>Foram ignoradas {{ resumo_importacao.quantidade_ignorados }} consolidação(ões) sem categoria ativa ou com valor líquido não positivo.</p>
+        </div>
+      {% else %}
+        <div class="budget-import-summary{% if resumo_importacao.quantidade_destino > 0 %} budget-import-warning{% endif %} wide" role="status">
+          <div class="budget-import-metrics">
+            <div class="budget-import-metric"><span>Valores importáveis</span><strong>{{ resumo_importacao.quantidade_importavel }} orçamento(s)</strong></div>
+            <div class="budget-import-metric"><span>Total importável</span><strong>{{ resumo_importacao.valor_importavel|brl }}</strong></div>
+            <div class="budget-import-metric"><span>Registros no destino</span><strong>{{ resumo_importacao.quantidade_destino }}</strong></div>
+            <div class="budget-import-metric"><span>Combinações faltantes</span><strong>{{ resumo_importacao.quantidade_faltantes }}</strong></div>
+          </div>
+          {% if resumo_importacao.quantidade_destino > 0 %}
+            <p>A importação completa substituirá todos os registros do destino. A parcial preservará os atuais e incluirá somente categorias e âmbitos faltantes.</p>
+          {% else %}
+            <p>O período de destino está vazio e receberá todos os valores consolidados.</p>
+          {% endif %}
+        </div>
+      {% endif %}
+      {% if resumo_importacao.quantidade_ignorados %}
+        <div class="budget-import-summary wide">
+          <p><strong>Itens ignorados: {{ resumo_importacao.quantidade_ignorados }}</strong></p>
+          <ul class="budget-import-ignored">
+            {% if resumo_importacao.ignorados.sem_categoria.quantidade %}<li>Sem categoria: {{ resumo_importacao.ignorados.sem_categoria.quantidade }} ({{ resumo_importacao.ignorados.sem_categoria.valor|brl }})</li>{% endif %}
+            {% if resumo_importacao.ignorados.categoria_inativa.quantidade %}<li>Categoria superior inativa ou não elegível: {{ resumo_importacao.ignorados.categoria_inativa.quantidade }} ({{ resumo_importacao.ignorados.categoria_inativa.valor|brl }})</li>{% endif %}
+            {% if resumo_importacao.ignorados.nao_positivos.quantidade %}<li>Valor líquido zerado ou negativo: {{ resumo_importacao.ignorados.nao_positivos.quantidade }} ({{ resumo_importacao.ignorados.nao_positivos.valor|brl }})</li>{% endif %}
+          </ul>
+        </div>
+      {% endif %}
+    {% else %}
+      <div class="form-note wide">Escolha os períodos e continue para revisar os valores consolidados antes da importação.</div>
+    {% endif %}
+
+    <div class="actions wide">
+      <button class="button secondary" type="button" data-close-dialog>Cancelar</button>
+      {% if resumo_importacao %}
+        <button class="button secondary" type="submit" name="acao" value="alterar">Alterar períodos</button>
+        {% if resumo_importacao.quantidade_importavel > 0 %}
+          {% if resumo_importacao.quantidade_destino > 0 %}
+            <button class="button secondary danger" type="submit" name="acao" value="completa">Substituir e importar tudo</button>
+            <button class="button" type="submit" name="acao" value="parcial"{% if resumo_importacao.quantidade_faltantes == 0 %} disabled aria-disabled="true" title="Todas as categorias e âmbitos importáveis já existem no destino"{% endif %}>Importar somente faltantes</button>
+          {% else %}
+            <button class="button" type="submit" name="acao" value="completa">Importar valores</button>
+          {% endif %}
+        {% endif %}
+      {% else %}
+        <button class="button" type="submit" name="acao" value="revisar">Continuar</button>
+      {% endif %}
+    </div>
+  </form>
+</section>
+{% endblock %}

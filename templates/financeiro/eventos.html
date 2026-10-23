@@ -4,7 +4,7 @@
 {% block content %}
 <style>
   .transactions-page{max-width:1600px}.transactions-page .top{margin-bottom:22px}.transactions-header-actions{display:flex;align-items:end;gap:12px}.transactions-period{display:grid;gap:5px;font-size:14px}.transactions-period select{width:auto;min-width:112px}.transactions-header-actions .button{min-height:42px;align-items:center}
-  .transactions-filters-panel{margin-bottom:16px}.transactions-filters{margin:0}.transactions-filters-grid{display:grid;grid-template-columns:repeat(4,minmax(170px,1fr));gap:12px;align-items:end}.transactions-filters-grid label{display:grid;gap:5px;font-size:14px}.transactions-search{grid-column:span 2}.transactions-filter-note{font-size:14px;color:var(--muted);margin:12px 0 0}.transactions-filter-footer{display:flex;justify-content:flex-end;margin-top:12px}
+  .transactions-filters-panel{margin-bottom:16px}.transactions-filters{margin:0}.transactions-filters-grid{display:grid;grid-template-columns:repeat(4,minmax(170px,1fr));gap:12px;align-items:end}.transactions-filters-grid label{display:grid;gap:5px;font-size:14px}.transactions-date-control{width:100%}.transactions-search{grid-column:span 2}.transactions-filter-note{font-size:14px;color:var(--muted);margin:12px 0 0}.transactions-filter-footer{display:flex;justify-content:flex-end;margin-top:12px}
   .transactions-filters-grid .transactions-group-card{display:flex;align-items:center;gap:8px;align-self:center}.transactions-group-card input{width:auto}
   .transactions-totals{display:flex;justify-content:flex-end;gap:12px;margin:0 0 16px}.transactions-total-card{min-width:190px;background:white;border:1px solid var(--line);border-radius:10px;padding:12px 16px}.transactions-total-card span{display:block;color:var(--muted);font-size:13px}.transactions-total-card strong{display:block;margin-top:3px;font-size:21px;letter-spacing:-.3px}
   .transactions-list-panel{margin-top:0}.transactions-list-panel .collapsible-summary{padding-bottom:18px}.transactions-list-panel .collapsible-content{padding-top:0}
@@ -31,8 +31,24 @@
     <form id="transactionsFilters" class="transactions-filters" method="get" aria-label="Filtros dos lançamentos">
     {% if analysis_active %}<input type="hidden" name="analysis_type" value="{{ analysis_type }}"><input type="hidden" name="analysis_value" value="{{ analysis_value }}"><input type="hidden" name="analysis_nature" value="{{ analysis_nature }}">{% if analysis_scope != "all" %}<input type="hidden" name="analysis_scope" value="{{ analysis_scope }}">{% endif %}{% endif %}
     <div class="transactions-filters-grid">
-      <label for="dateFromFilter">Data inicial<input id="dateFromFilter" name="date_from" value="{{ data_inicial|date:'d/m/Y' }}" placeholder="DD/MM/AAAA" inputmode="numeric" data-date-filter></label>
-      <label for="dateToFilter">Data final<input id="dateToFilter" name="date_to" value="{{ data_final|date:'d/m/Y' }}" placeholder="DD/MM/AAAA" inputmode="numeric" data-date-filter></label>
+      <label for="dateFromFilter">Data inicial
+        <span class="temporal-control transactions-date-control" data-transactions-date-control>
+          <input id="dateFromFilter" name="date_from" value="{{ data_inicial|date:'d/m/Y' }}" placeholder="DD/MM/AAAA" inputmode="numeric" autocomplete="off" data-date-filter data-date-role="from">
+          <button type="button" data-open-transactions-date-picker aria-label="Selecionar data inicial no calendário" title="Selecionar data inicial">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3v3M17 3v3M4 9h16M5 5h14a1 1 0 0 1 1 1v14H4V6a1 1 0 0 1 1-1Z"/></svg>
+          </button>
+          <input class="temporal-native" type="date" tabindex="-1" aria-hidden="true" data-transactions-date-native>
+        </span>
+      </label>
+      <label for="dateToFilter">Data final
+        <span class="temporal-control transactions-date-control" data-transactions-date-control>
+          <input id="dateToFilter" name="date_to" value="{{ data_final|date:'d/m/Y' }}" placeholder="DD/MM/AAAA" inputmode="numeric" autocomplete="off" data-date-filter data-date-role="to">
+          <button type="button" data-open-transactions-date-picker aria-label="Selecionar data final no calendário" title="Selecionar data final">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3v3M17 3v3M4 9h16M5 5h14a1 1 0 0 1 1 1v14H4V6a1 1 0 0 1 1-1Z"/></svg>
+          </button>
+          <input class="temporal-native" type="date" tabindex="-1" aria-hidden="true" data-transactions-date-native>
+        </span>
+      </label>
       <label for="accountFilter">Conta financeira<select id="accountFilter" name="account"><option value="all">Todas as contas</option>{% for conta in contas %}<option value="{{ conta.pk }}"{% if conta_selecionada.pk == conta.pk %} selected{% endif %}>{{ conta.nome }}{% if not conta.ativa %} (inativa){% endif %}</option>{% endfor %}</select></label>
       <label for="cardFilter">Cartão de crédito<select id="cardFilter" name="card"><option value="all">Todos os cartões</option>{% for cartao in cartoes_compativeis %}<option value="{{ cartao.pk }}"{% if cartao_selecionado.pk == cartao.pk %} selected{% endif %}>{{ cartao.nome }}{% if not cartao.ativo %} (inativo){% endif %}</option>{% endfor %}</select></label>
       <label class="transactions-search" for="transactionSearch">Descrição, pessoa ou documento<input id="transactionSearch" name="q" placeholder="Buscar lançamentos" value="{{ busca }}"></label>
@@ -87,11 +103,65 @@
   (() => {
     const filterForm = document.getElementById('transactionsFilters');
     document.getElementById('periodFilter')?.addEventListener('change', () => filterForm.requestSubmit());
-    filterForm?.querySelectorAll('select:not(#periodFilter), [data-date-filter], [data-card-invoice-grouping]').forEach((field) => field.addEventListener('change', () => filterForm.requestSubmit()));
-    filterForm?.querySelectorAll('[data-date-filter]').forEach((field) => field.addEventListener('input', () => {
-      const digits = field.value.replace(/\D/g, '').slice(0, 8);
-      field.value = [digits.slice(0, 2), digits.slice(2, 4), digits.slice(4, 8)].filter(Boolean).join('/');
-    }));
+    filterForm?.querySelectorAll('select:not(#periodFilter), [data-card-invoice-grouping]').forEach((field) => field.addEventListener('change', () => filterForm.requestSubmit()));
+    const transactionsDateControls = Array.from(filterForm?.querySelectorAll('[data-transactions-date-control]') || []);
+    const parseDisplayDate = (value) => {
+      const match = value.trim().match(/^(0[1-9]|[12]\d|3[01])\/(0[1-9]|1[0-2])\/(\d{4})$/);
+      if (!match) return null;
+      const parsed = {day: Number(match[1]), month: Number(match[2]), year: Number(match[3])};
+      const candidate = new Date(parsed.year, parsed.month - 1, parsed.day);
+      if (candidate.getFullYear() !== parsed.year || candidate.getMonth() !== parsed.month - 1 || candidate.getDate() !== parsed.day) return null;
+      return parsed;
+    };
+    const padDatePart = (value) => String(value).padStart(2, '0');
+    const toNativeDate = (value) => {
+      const parsed = parseDisplayDate(value);
+      return parsed ? `${parsed.year}-${padDatePart(parsed.month)}-${padDatePart(parsed.day)}` : '';
+    };
+    const toDisplayDate = (value) => {
+      const match = value.match(/^(\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/);
+      if (!match) return '';
+      const displayValue = `${match[3]}/${match[2]}/${match[1]}`;
+      return parseDisplayDate(displayValue) ? displayValue : '';
+    };
+    const syncFinalDateFromInitial = () => {
+      const initial = document.getElementById('dateFromFilter');
+      const final = document.getElementById('dateToFilter');
+      const parsed = parseDisplayDate(initial?.value || '');
+      if (!parsed || !final) return;
+      const lastDay = new Date(parsed.year, parsed.month, 0).getDate();
+      final.value = `${padDatePart(lastDay)}/${padDatePart(parsed.month)}/${parsed.year}`;
+      const finalNative = final.closest('[data-transactions-date-control]')?.querySelector('[data-transactions-date-native]');
+      if (finalNative) finalNative.value = toNativeDate(final.value);
+    };
+    transactionsDateControls.forEach((control) => {
+      const field = control.querySelector('[data-date-filter]');
+      const native = control.querySelector('[data-transactions-date-native]');
+      const button = control.querySelector('[data-open-transactions-date-picker]');
+      if (!field || !native || !button) return;
+      native.value = toNativeDate(field.value);
+      button.addEventListener('click', () => {
+        native.value = toNativeDate(field.value);
+        if (typeof native.showPicker === 'function') native.showPicker();
+        else native.click();
+      });
+      native.addEventListener('change', () => {
+        const displayValue = toDisplayDate(native.value);
+        if (!displayValue) return;
+        field.value = displayValue;
+        field.dispatchEvent(new Event('change', {bubbles: true}));
+      });
+      field.addEventListener('input', () => {
+        const digits = field.value.replace(/\D/g, '').slice(0, 8);
+        field.value = [digits.slice(0, 2), digits.slice(2, 4), digits.slice(4, 8)].filter(Boolean).join('/');
+        native.value = toNativeDate(field.value);
+      });
+      field.addEventListener('change', () => {
+        if (field.dataset.dateRole === 'from') syncFinalDateFromInitial();
+        native.value = toNativeDate(field.value);
+        filterForm.requestSubmit();
+      });
+    });
     const search = document.getElementById('transactionSearch');
     let timer;
     search?.addEventListener('input', () => { window.clearTimeout(timer); timer = window.setTimeout(() => filterForm.requestSubmit(), 350); });

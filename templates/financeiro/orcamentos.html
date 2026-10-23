@@ -9,6 +9,7 @@
   .budget-filter-category{flex:1 1 360px;min-width:280px}
   .budget-filter-scope{flex:0 1 240px;min-width:210px}
   .budget-filter-period{flex:0 0 140px;min-width:140px}
+  .budget-page-actions{min-width:0;flex-wrap:wrap;justify-content:flex-end}
   .budget-table{min-width:1080px}
   .budget-realized{color:var(--danger);font-weight:700;white-space:nowrap}
   .budget-realized-content{display:inline-flex;align-items:center;gap:7px}
@@ -42,11 +43,17 @@
   @media(max-width:700px){
     .budget-filter-category,.budget-filter-scope,.budget-filter-period{flex:1 1 100%;width:100%;min-width:100%}
     .budget-filters .secondary{width:100%}
+    .budget-page-actions{width:100%}
+    .budget-page-actions .button,.budget-page-actions .secondary{flex:1 1 180px;justify-content:center}
   }
 </style>
 <header class="top">
   <div><div class="eyebrow">Planejamento</div><h1>Orçamentos</h1></div>
-  <a class="button" href="{% url 'orcamento_novo' %}?{{ filtros_query }}" data-modal-url="{% url 'orcamento_novo' %}?{{ filtros_query }}" data-modal-title="Novo orçamento">Novo orçamento</a>
+  <div class="row-actions budget-page-actions">
+    <a class="secondary" href="{% url 'orcamentos_importar_despesas' %}?mes={{ mes_filtro|urlencode }}" data-modal-url="{% url 'orcamentos_importar_despesas' %}?mes={{ mes_filtro|urlencode }}" data-modal-title="Importar valores para o orçamento">Importar valores</a>
+    <a class="secondary" href="{% url 'orcamentos_clonar_periodo' %}?mes={{ mes_filtro|urlencode }}" data-modal-url="{% url 'orcamentos_clonar_periodo' %}?mes={{ mes_filtro|urlencode }}" data-modal-title="Clonar período de orçamento">Clonar período</a>
+    <a class="button" href="{% url 'orcamento_novo' %}?{{ filtros_query }}" data-modal-url="{% url 'orcamento_novo' %}?{{ filtros_query }}" data-modal-title="Novo orçamento">Novo orçamento</a>
+  </div>
 </header>
 <section class="panel full registry-panel">
   <form class="filters budget-filters" method="get" aria-label="Filtros dos orçamentos">
@@ -63,7 +70,13 @@
       </select>
     </label>
     <label class="budget-filter-field budget-filter-period">Período
-      <input name="mes" aria-label="Período" placeholder="MM/AAAA" inputmode="numeric" data-month-input="true" value="{{ mes_filtro }}">
+      <span class="temporal-control" data-temporal-control="month">
+        <input name="mes" aria-label="Período" placeholder="MM/AAAA" inputmode="numeric" autocomplete="off" data-month-input="true" value="{{ mes_filtro }}">
+        <button type="button" data-open-temporal-picker aria-label="Abrir seletor de período">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3v3M17 3v3M4 9h16M5 5h14a1 1 0 0 1 1 1v14H4V6a1 1 0 0 1 1-1Z"/></svg>
+        </button>
+        <input class="temporal-native" type="month" tabindex="-1" aria-hidden="true">
+      </span>
     </label>
     <button class="secondary" type="submit">Filtrar</button>
     <a class="secondary" href="{% url 'orcamentos' %}?mes=">Limpar filtros</a>

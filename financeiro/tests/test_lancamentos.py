@@ -942,11 +942,29 @@ class LancamentosViewTests(TestCase):
             reverse("eventos"),
             {"date_from": "01/11/2026", "date_to": "30/11/2026"},
         )
+        conteudo = resposta_inicial.content.decode()
 
         self.assertContains(resposta_inicial, 'name="date_from" value="01/10/2026"')
         self.assertContains(resposta_inicial, 'name="date_to" value="31/10/2026"')
         self.assertContains(resposta_novembro, 'name="date_from" value="01/11/2026"')
         self.assertContains(resposta_novembro, 'name="date_to" value="30/11/2026"')
+        self.assertContains(
+            resposta_inicial,
+            'class="temporal-control transactions-date-control" data-transactions-date-control',
+            count=2,
+        )
+        self.assertContains(
+            resposta_inicial,
+            'class="temporal-native" type="date" tabindex="-1" aria-hidden="true" data-transactions-date-native',
+            count=2,
+        )
+        self.assertContains(resposta_inicial, 'data-date-role="from"')
+        self.assertContains(resposta_inicial, 'data-date-role="to"')
+        self.assertContains(resposta_inicial, 'aria-label="Selecionar data inicial no calendário"')
+        self.assertContains(resposta_inicial, 'aria-label="Selecionar data final no calendário"')
+        self.assertIn("const syncFinalDateFromInitial = () =>", conteudo)
+        self.assertIn("new Date(parsed.year, parsed.month, 0).getDate()", conteudo)
+        self.assertIn("if (typeof native.showPicker === 'function') native.showPicker()", conteudo)
 
     def test_pagina_exibe_vencimento_da_fatura_abaixo_da_data_original(self):
         cartao = Cartao.objects.create(

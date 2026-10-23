@@ -2,7 +2,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib import messages
 from django.core.exceptions import ValidationError
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import F, Max, Prefetch, ProtectedError, Q
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -20,6 +20,8 @@ from .forms import (
     CategoriaForm,
     CompraCartaoForm,
     ContaForm,
+    ClonagemPeriodoOrcamentoForm,
+    ImportacaoDespesasOrcamentoForm,
     ImportacaoOFXForm,
     ImportacaoPlanilhaForm,
     ItemImportacaoForm,
@@ -61,8 +63,18 @@ from .services.importacao_ofx import (
 from .services.importacao_planilha import criar_itens_planilha, ler_compras_planilha
 from .services.parcelas_futuras import consultar_parcelas_futuras
 from .services.orcamentos import (
+    CLONAGEM_COMPLETA,
+    CLONAGEM_PARCIAL,
+    IMPORTACAO_COMPLETA,
+    IMPORTACAO_PARCIAL,
+    ClonagemPeriodoOrcamentoInvalida,
+    ImportacaoDespesasOrcamentoInvalida,
     alertas_orcamento_dashboard,
+    clonar_periodo_orcamentos,
     enriquecer_orcamentos_com_realizado,
+    importar_despesas_para_orcamento,
+    previsualizar_clonagem_periodo,
+    previsualizar_importacao_despesas,
     resumir_orcamento_dashboard,
 )
 from .services.regras_categoria import DadosClassificacao, carregar_regras_categoria, melhor_regra_manual
@@ -744,6 +756,15 @@ def _proximo_mes_orcamento(valor):
     return f"{ano + (mes == 12):04d}-{1 if mes == 12 else mes + 1:02d}"
 
 
+def _mes_anterior_orcamento(valor):
+    ano, mes = map(int, valor.split("-"))
+    return f"{ano - (mes == 1):04d}-{12 if mes == 1 else mes - 1:02d}"
+
+
+def _rotulo_mes_orcamento(valor):
+    return f"{valor[5:7]}/{valor[:4]}"
+
+
 def _url_retorno_orcamentos(request):
     filtros = {
         nome: request.GET.get(nome, "")
@@ -752,6 +773,155 @@ def _url_retorno_orcamentos(request):
     }
     query = urlencode(filtros)
     return f"{reverse('orcamentos')}?{query}" if query else reverse("orcamentos")
+
+
+def _url_periodo_orcamentos(mes):
+    query = urlencode({"categoria": "", "mes": _rotulo_mes_orcamento(mes), "ambito": ""})
+    return f"{reverse('orcamentos')}?{query}"
+
+
+@login_required
+def clonar_periodo_orcamentos_view(request):
+    mes_origem = _mes_orcamento(request.GET.get("mes", ""))
+    if not mes_origem:
+        hoje = timezone.localdate()
+        mes_origem = f"{hoje.year:04d}-{hoje.month:02d}"
+
+    resumo = None
+    if request.method == "POST":
+        form = ClonagemPeriodoOrcamentoForm(request.POST)
+        if form.is_valid():
+            origem = form.cleaned_data["mes_origem"]
+            destino = form.cleaned_data["mes_destino"]
+            acao = request.POST.get("acao", "")
+            if acao == "alterar":
+                form = ClonagemPeriodoOrcamentoForm(
+                    initial={"mes_origem": origem, "mes_destino": destino}
+                )
+            elif acao == "revisar":
+                resumo = previsualizar_clonagem_periodo(request.user, origem, destino)
+            elif acao in {CLONAGEM_COMPLETA, CLONAGEM_PARCIAL}:
+                try:
+                    resultado = clonar_periodo_orcamentos(request.user, origem, destino, acao)
+                except ClonagemPeriodoOrcamentoInvalida as exc:
+                    form.add_error(None, str(exc))
+                    resumo = previsualizar_clonagem_periodo(request.user, origem, destino)
+                except IntegrityError:
+                    form.add_error(
+                        None,
+                        "Os orçamentos foram alterados durante a confirmação. Revise os períodos e tente novamente.",
+                    )
+                    resumo = previsualizar_clonagem_periodo(request.user, origem, destino)
+                else:
+                    if resultado["modo"] == CLONAGEM_COMPLETA:
+                        messages.success(
+                            request,
+                            "Período clonado: "
+                            f"{resultado['copiados']} orçamento(s) copiado(s) e "
+                            f"{resultado['substituidos']} registro(s) do destino substituído(s).",
+                        )
+                    else:
+                        messages.success(
+                            request,
+                            "Clonagem parcial concluída: "
+                            f"{resultado['copiados']} orçamento(s) incluído(s), "
+                            f"{resultado['preservados']} registro(s) do destino preservado(s) e "
+                            f"{resultado['ignorados']} combinação(ões) já existente(s) ignorada(s).",
+                        )
+                    return redirect(_url_periodo_orcamentos(destino))
+            else:
+                form.add_error(None, "Escolha uma ação válida para continuar.")
+    else:
+        form = ClonagemPeriodoOrcamentoForm(
+            initial={
+                "mes_origem": mes_origem,
+                "mes_destino": _proximo_mes_orcamento(mes_origem),
+            }
+        )
+
+    if resumo is not None:
+        resumo["mes_origem_rotulo"] = _rotulo_mes_orcamento(resumo["mes_origem"])
+        resumo["mes_destino_rotulo"] = _rotulo_mes_orcamento(resumo["mes_destino"])
+    return render(
+        request,
+        "financeiro/orcamento_clonar_periodo.html",
+        {
+            "form": form,
+            "titulo": "Clonar período de orçamento",
+            "resumo_clonagem": resumo,
+        },
+    )
+
+
+@login_required
+def importar_despesas_orcamento_view(request):
+    hoje = timezone.localdate()
+    mes_atual = f"{hoje.year:04d}-{hoje.month:02d}"
+    mes_destino = _mes_orcamento(request.GET.get("mes", "")) or mes_atual
+    mes_despesas = min(_mes_anterior_orcamento(mes_destino), mes_atual)
+
+    resumo = None
+    if request.method == "POST":
+        form = ImportacaoDespesasOrcamentoForm(request.POST, mes_atual=mes_atual)
+        if form.is_valid():
+            despesas = form.cleaned_data["mes_despesas"]
+            destino = form.cleaned_data["mes_destino"]
+            acao = request.POST.get("acao", "")
+            if acao == "alterar":
+                form = ImportacaoDespesasOrcamentoForm(
+                    initial={"mes_despesas": despesas, "mes_destino": destino},
+                    mes_atual=mes_atual,
+                )
+            elif acao == "revisar":
+                resumo = previsualizar_importacao_despesas(request.user, despesas, destino)
+            elif acao in {IMPORTACAO_COMPLETA, IMPORTACAO_PARCIAL}:
+                try:
+                    resultado = importar_despesas_para_orcamento(
+                        request.user,
+                        despesas,
+                        destino,
+                        acao,
+                    )
+                except ImportacaoDespesasOrcamentoInvalida as exc:
+                    form.add_error(None, str(exc))
+                    resumo = previsualizar_importacao_despesas(request.user, despesas, destino)
+                except IntegrityError:
+                    form.add_error(
+                        None,
+                        "Os orçamentos foram alterados durante a confirmação. "
+                        "Revise os períodos e tente novamente.",
+                    )
+                    resumo = previsualizar_importacao_despesas(request.user, despesas, destino)
+                else:
+                    messages.success(
+                        request,
+                        "Importação concluída: "
+                        f"{resultado['incluidos']} orçamento(s) incluído(s), "
+                        f"{resultado['preservados']} registro(s) preservado(s), "
+                        f"{resultado['substituidos']} registro(s) substituído(s) e "
+                        f"{resultado['ignorados']} item(ns) ignorado(s).",
+                    )
+                    return redirect(_url_periodo_orcamentos(destino))
+            else:
+                form.add_error(None, "Escolha uma ação válida para continuar.")
+    else:
+        form = ImportacaoDespesasOrcamentoForm(
+            initial={"mes_despesas": mes_despesas, "mes_destino": mes_destino},
+            mes_atual=mes_atual,
+        )
+
+    if resumo is not None:
+        resumo["mes_despesas_rotulo"] = _rotulo_mes_orcamento(resumo["mes_despesas"])
+        resumo["mes_destino_rotulo"] = _rotulo_mes_orcamento(resumo["mes_destino"])
+    return render(
+        request,
+        "financeiro/orcamento_importar_despesas.html",
+        {
+            "form": form,
+            "titulo": "Importar valores para o orçamento",
+            "resumo_importacao": resumo,
+        },
+    )
 
 
 class OrcamentoListView(UsuarioMixin, ListView):

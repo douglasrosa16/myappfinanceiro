@@ -303,6 +303,64 @@ class OrcamentoForm(forms.ModelForm):
         return cleaned
 
 
+class ClonagemPeriodoOrcamentoForm(forms.Form):
+    mes_origem = CicloField(label="Período de origem")
+    mes_destino = CicloField(label="Período de destino")
+
+    def _validar_mes(self, nome_campo):
+        mes = self.cleaned_data[nome_campo]
+        if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", mes or ""):
+            raise forms.ValidationError("Informe o mês no formato MM/AAAA.")
+        return mes
+
+    def clean_mes_origem(self):
+        return self._validar_mes("mes_origem")
+
+    def clean_mes_destino(self):
+        return self._validar_mes("mes_destino")
+
+    def clean(self):
+        cleaned = super().clean()
+        if cleaned.get("mes_origem") and cleaned.get("mes_origem") == cleaned.get("mes_destino"):
+            self.add_error("mes_destino", "O período de destino deve ser diferente do período de origem.")
+        return cleaned
+
+
+class ImportacaoDespesasOrcamentoForm(forms.Form):
+    mes_despesas = CicloField(label="Período das despesas")
+    mes_destino = CicloField(label="Período de destino")
+
+    def __init__(self, *args, mes_atual=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.mes_atual = mes_atual
+
+    def _validar_mes(self, nome_campo):
+        mes = self.cleaned_data[nome_campo]
+        if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", mes or ""):
+            raise forms.ValidationError("Informe o mês no formato MM/AAAA.")
+        return mes
+
+    def clean_mes_despesas(self):
+        mes = self._validar_mes("mes_despesas")
+        if self.mes_atual and mes > self.mes_atual:
+            raise forms.ValidationError("O período das despesas não pode ser posterior ao mês atual.")
+        return mes
+
+    def clean_mes_destino(self):
+        return self._validar_mes("mes_destino")
+
+    def clean(self):
+        cleaned = super().clean()
+        mes_despesas = cleaned.get("mes_despesas")
+        mes_destino = cleaned.get("mes_destino")
+        if mes_despesas and mes_destino and mes_destino <= mes_despesas:
+            self.add_error(
+                "mes_destino",
+                "O período de destino deve ser posterior ao período das despesas.",
+            )
+        return cleaned
+
+
 class PessoaForm(forms.ModelForm):
     class Meta:
         model = Pessoa

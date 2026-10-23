@@ -1529,11 +1529,29 @@ class LancamentoDashboardTests(TestCase):
     @patch("financeiro.services.dashboard.timezone.localdate", return_value=date(2026, 10, 7))
     def test_view_renderiza_datas_do_mes_corrente_sem_seletor_de_periodo(self, _localdate):
         resposta = self.client.get(reverse("dashboard"))
+        conteudo = resposta.content.decode()
 
         self.assertContains(resposta, 'name="date_from"')
         self.assertContains(resposta, 'value="01/10/2026"')
         self.assertContains(resposta, 'name="date_to"')
         self.assertContains(resposta, 'value="31/10/2026"')
+        self.assertContains(
+            resposta,
+            'class="temporal-control overview-date-control" data-dashboard-date-control',
+            count=2,
+        )
+        self.assertContains(
+            resposta,
+            'class="temporal-native" type="date" tabindex="-1" aria-hidden="true" data-dashboard-date-native',
+            count=2,
+        )
+        self.assertContains(resposta, 'data-date-role="from"')
+        self.assertContains(resposta, 'data-date-role="to"')
+        self.assertContains(resposta, 'aria-label="Selecionar data inicial no calendário"')
+        self.assertContains(resposta, 'aria-label="Selecionar data final no calendário"')
+        self.assertIn("const syncFinalDateFromInitial = () =>", conteudo)
+        self.assertIn("new Date(parsed.year, parsed.month, 0).getDate()", conteudo)
+        self.assertIn("if (typeof native.showPicker === 'function') native.showPicker()", conteudo)
         self.assertNotContains(resposta, '<select id="periodFilter"')
 
     def test_view_renderiza_dashboard_e_formulario_compartilhado(self):
