@@ -97,6 +97,11 @@ class CategoriaFormTests(TestCase):
         self.assertEqual(categoria.essencialidade, Categoria.Essencialidade.PROFISSIONAL)
         self.assertTrue(categoria.computa_resultado)
 
+    def test_exibe_rotulo_compoe_no_resultado(self):
+        form = CategoriaForm(usuario=self.usuario)
+
+        self.assertEqual(form.fields["computa_resultado"].label, "Compõe no resultado")
+
     def test_nao_oferece_propria_categoria_nem_descendentes_como_pai(self):
         raiz = Categoria.objects.create(usuario=self.usuario, nome="Raiz")
         filha = Categoria.objects.create(usuario=self.usuario, nome="Filha", categoria_pai=raiz)
@@ -113,6 +118,7 @@ class CategoriaViewsTests(TestCase):
         self.client.force_login(self.usuario)
 
     def test_listagem_exibe_novas_classificacoes(self):
+        Categoria.objects.create(usuario=self.usuario, nome="Salário")
         Categoria.objects.create(
             usuario=self.usuario,
             nome="Restaurantes",
@@ -125,7 +131,8 @@ class CategoriaViewsTests(TestCase):
 
         self.assertContains(resposta, "Natureza")
         self.assertContains(resposta, "Estilo de vida")
-        self.assertContains(resposta, "Não computa")
+        self.assertContains(resposta, "Compõe")
+        self.assertContains(resposta, "Não compõe")
 
     def test_exclusao_sem_vinculo_e_bloqueio_com_movimentacao(self):
         livre = Categoria.objects.create(usuario=self.usuario, nome="Livre")

@@ -50,7 +50,7 @@
           <td>{{ objeto.categoria_pai|default:"-" }}</td>
           <td><span class="pill">{{ objeto.get_natureza_display }}</span></td>
           <td><span class="pill">{{ objeto.get_essencialidade_display }}</span></td>
-          <td>{% if objeto.computa_resultado %}<span class="pill pill-active">Computa</span>{% else %}<span class="pill pill-inactive">Não computa</span>{% endif %}</td>
+          <td>{% if objeto.computa_resultado %}<span class="pill pill-active">Compõe</span>{% else %}<span class="pill pill-inactive">Não compõe</span>{% endif %}</td>
           <td>{% if objeto.ativa %}<span class="pill pill-active">Ativo</span>{% else %}<span class="pill pill-inactive">Inativo</span>{% endif %}</td>
         {% else %}
           <td>{{ objeto.documento|default:"-" }}</td>

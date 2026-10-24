@@ -8,6 +8,7 @@
   .overview-heading{display:flex;justify-content:space-between;align-items:center;gap:16px;margin:0 0 18px}.overview-heading h2{margin:0}.overview-page .kpis{margin-bottom:22px}.overview-page .card .label{font-size:14px;color:var(--muted)}.overview-page .value{letter-spacing:-.7px}
   .overview-grid{display:grid;grid-template-columns:1.2fr 1fr;gap:22px}.overview-grid.equal{grid-template-columns:1fr 1fr}.overview-grid.three{grid-template-columns:repeat(3,1fr)}.overview-section{margin-top:22px}.overview-section:first-of-type{margin-top:0}.overview-empty{color:var(--muted);font-size:14px;margin:10px 0}.overview-helper{font-size:14px;color:var(--muted);margin:15px 0 0}
   .bar-list{display:grid;gap:14px}.bar-label{display:flex;justify-content:space-between;gap:14px;font-size:14px;margin-bottom:5px}.bar-label strong{white-space:nowrap}.bar-track{height:9px;background:#eef2f8;border-radius:10px;overflow:hidden}.bar-fill{width:0;height:100%;background:var(--danger);border-radius:10px;min-width:0}.bar-fill.green{background:var(--green)}.bar-fill.orange,.bar-fill.red{background:var(--danger)}.bar-meta{color:var(--muted);font-size:13px}
+  .category-tabs{display:inline-flex;gap:4px;padding:4px;margin:-4px 0 18px;background:#eef2f8;border-radius:9px}.category-tab{border:0;background:transparent;color:var(--muted);border-radius:7px;padding:8px 12px;font:inherit;font-size:13px;font-weight:700;cursor:pointer}.category-tab[aria-selected="true"]{background:#fff;color:var(--blue);box-shadow:0 1px 3px #17233b1f}.category-tab:focus-visible{outline:2px solid var(--blue);outline-offset:2px}.category-tab-panel[hidden]{display:none}.category-computation-badge{display:inline-flex;align-items:center;border-radius:999px;background:#fff1d6;color:#8a5a00;padding:2px 7px;font-size:11px;font-weight:700;white-space:nowrap}
   .indicator-detail{display:block;color:inherit;text-decoration:none;border-radius:8px;padding:7px;margin:-7px;transition:background .18s ease,box-shadow .18s ease}.indicator-detail:hover,.indicator-detail:focus-visible{background:#f1f6fd;box-shadow:0 0 0 2px #2769d833;outline:0}.indicator-detail.is-disabled{cursor:default}.indicator-detail.is-disabled:hover{background:transparent;box-shadow:none}.indicator-detail-label{display:inline-flex;align-items:center;gap:7px}.indicator-detail-icon{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;color:var(--blue);flex:none}.indicator-detail-card{padding:10px;margin:-10px}.indicator-detail-card .value{margin-top:5px}.metric-list-item.indicator-detail{padding:11px 7px;margin:0 -7px}.metric-list-item.indicator-detail:last-child{border-bottom:0}
   .analysis-filter{display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin:-4px 0 18px}.analysis-filter label{min-width:160px}.filter-pill{display:inline-flex;gap:5px;align-items:center}.filter-pill input{width:auto}.metric-list{display:grid;gap:12px}.metric-list-item{display:flex;justify-content:space-between;gap:15px;padding:11px 0;border-bottom:1px solid var(--line)}.metric-list-item:last-child{border-bottom:0}.metric-list-item small{display:block;color:var(--muted)}
   .simulator{background:#f1f7ff;padding:18px;border-radius:9px}.simulator h3{font-size:17px;margin:0 0 7px}.simulator-list{display:grid;gap:12px;margin-top:16px}.simulator-item{background:#fff;border:1px solid #dbe8f8;border-radius:8px;padding:12px}.simulator-item-head{display:flex;justify-content:space-between;gap:12px}.simulator-control{display:grid;grid-template-columns:1fr auto;align-items:center;gap:10px;margin-top:8px}.simulator-control input{padding:0;border:0;background:transparent;accent-color:#1477ed}.simulator-rate{font-weight:700;white-space:nowrap}.simulator-totals{border-top:1px solid #c9dcef;margin-top:15px;padding-top:12px;display:grid;gap:5px}.simulator-total-row{display:flex;justify-content:space-between;gap:12px}
@@ -126,18 +127,31 @@
   </section>
 
   <section class="overview-grid overview-section" aria-label="Gastos por categoria e distribuição por natureza">
-    <article class="panel" aria-labelledby="categoryTitle">
-      <div class="overview-heading"><h2 id="categoryTitle">Gastos por categoria <span class="collapsible-summary-meta">Total · <span class="{{ total_gastos_por_categoria|classe_valor:'saida' }}">{{ total_gastos_por_categoria|brl }}</span></span></h2><span class="small">Conta + cartão, sem duplicar pagamento de fatura</span></div>
+    <article class="panel" aria-labelledby="categoryTitle" data-category-tabs>
+      <div class="overview-heading"><h2 id="categoryTitle">Gastos por categoria <span class="collapsible-summary-meta">Total · <span class="{{ total_gastos_por_categoria|classe_valor:'saida' }}" data-category-total="COMPUTA">{{ total_gastos_por_categoria|brl }}</span><span class="{{ total_gastos_por_categoria_nao_computa|classe_valor:'saida' }}" data-category-total="NAO_COMPUTA" hidden>{{ total_gastos_por_categoria_nao_computa|brl }}</span></span></h2><span class="small">Conta + cartão, sem duplicar pagamento de fatura</span></div>
       <!-- <div class="analysis-filter" aria-label="Filtros da análise de gastos">
         <label for="originFilter">Origem<select id="originFilter" name="origin" form="overviewFilters">{% for valor, rotulo in origens_analiticas %}<option value="{{ valor }}"{% if valor == origem_filtro %} selected{% endif %}>{{ rotulo }}</option>{% endfor %}</select></label>
         <label for="natureFilter">Natureza<select id="natureFilter" name="nature" form="overviewFilters">{% for valor, rotulo in naturezas_analiticas %}<option value="{{ valor }}"{% if valor == natureza_filtro %} selected{% endif %}>{{ rotulo }}</option>{% endfor %}</select></label>
       </div> -->
-      {% if gastos_por_categoria %}<div class="bar-list">{% for categoria in gastos_por_categoria %}
-        {% if categoria.categoria_id %}<a class="indicator-detail" href="{% url 'eventos' %}?{{ lancamentos_base_query }}&amp;analysis_type=category&amp;analysis_value={{ categoria.categoria_id }}&amp;parent_category={{ categoria.categoria_id }}&amp;computes=COMPUTA" data-dashboard-detail-url="{% url 'dashboard_detalhamento' %}?{{ detalhe_base_query }}&amp;type=category&amp;value={{ categoria.categoria_id }}" aria-label="Ver lançamentos que compõem a categoria {{ categoria.nome }}">{% else %}<a class="indicator-detail" href="{% url 'eventos' %}?{{ lancamentos_base_query }}&amp;analysis_type=category&amp;analysis_value=unclassified" data-dashboard-detail-url="{% url 'dashboard_detalhamento' %}?{{ detalhe_base_query }}&amp;type=category&amp;value=unclassified" aria-label="Ver lançamentos sem classificação">{% endif %}
-          <div class="bar-label"><span class="indicator-detail-label">{{ categoria.nome }}<svg class="indicator-detail-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></span><strong class="{{ categoria.valor|classe_valor:'saida' }}">{{ categoria.valor|brl_sinal }} · {{ categoria.percentual|floatformat:2 }}%</strong></div><div class="bar-track"><div class="bar-fill" style="width:{{ categoria.percentual_css }}%"></div></div>
-        </a>
-      {% endfor %}</div>{% else %}<p class="overview-empty">Nenhum gasto computável neste filtro.</p>{% endif %}
-      <p class="overview-helper">Subcategorias são agrupadas pela categoria superior. Categorias não computáveis permanecem no histórico e no fluxo de caixa.</p>
+      <div class="category-tabs" role="tablist" aria-label="Resultado das categorias">
+        <button class="category-tab" id="categoryTabComputa" type="button" role="tab" aria-selected="true" aria-controls="categoryPanelComputa" tabindex="0" data-category-tab="COMPUTA">Compõe no resultado</button>
+        <button class="category-tab" id="categoryTabNaoComputa" type="button" role="tab" aria-selected="false" aria-controls="categoryPanelNaoComputa" tabindex="-1" data-category-tab="NAO_COMPUTA">Não compõe no resultado</button>
+      </div>
+      <div class="category-tab-panel" id="categoryPanelComputa" role="tabpanel" aria-labelledby="categoryTabComputa" data-category-panel="COMPUTA">
+        {% if gastos_por_categoria %}<div class="bar-list">{% for categoria in gastos_por_categoria %}
+          {% if categoria.categoria_id %}<a class="indicator-detail" href="{% url 'eventos' %}?{{ lancamentos_base_query }}&amp;analysis_type=category&amp;analysis_value={{ categoria.categoria_id }}&amp;parent_category={{ categoria.categoria_id }}&amp;computes=COMPUTA" data-dashboard-detail-url="{% url 'dashboard_detalhamento' %}?{{ detalhe_base_query }}&amp;type=category&amp;value={{ categoria.categoria_id }}&amp;computes=COMPUTA" aria-label="Ver lançamentos que compõem a categoria {{ categoria.nome }}">{% else %}<a class="indicator-detail" href="{% url 'eventos' %}?{{ lancamentos_base_query }}&amp;analysis_type=category&amp;analysis_value=unclassified&amp;computes=COMPUTA" data-dashboard-detail-url="{% url 'dashboard_detalhamento' %}?{{ detalhe_base_query }}&amp;type=category&amp;value=unclassified&amp;computes=COMPUTA" aria-label="Ver lançamentos sem classificação">{% endif %}
+            <div class="bar-label"><span class="indicator-detail-label">{{ categoria.nome }}<svg class="indicator-detail-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></span><strong class="{{ categoria.valor|classe_valor:'saida' }}">{{ categoria.valor|brl_sinal }} · {{ categoria.percentual|floatformat:2 }}%</strong></div><div class="bar-track"><div class="bar-fill" style="width:{{ categoria.percentual_css }}%"></div></div>
+          </a>
+        {% endfor %}</div>{% else %}<p class="overview-empty">Nenhum gasto computável neste filtro.</p>{% endif %}
+      </div>
+      <div class="category-tab-panel" id="categoryPanelNaoComputa" role="tabpanel" aria-labelledby="categoryTabNaoComputa" data-category-panel="NAO_COMPUTA" hidden>
+        {% if gastos_por_categoria_nao_computa %}<div class="bar-list">{% for categoria in gastos_por_categoria_nao_computa %}
+          <a class="indicator-detail" href="{% url 'eventos' %}?{{ lancamentos_base_query }}&amp;analysis_type=category&amp;analysis_value={{ categoria.categoria_id }}&amp;parent_category={{ categoria.categoria_id }}&amp;computes=NAO_COMPUTA" data-dashboard-detail-url="{% url 'dashboard_detalhamento' %}?{{ detalhe_base_query }}&amp;type=category&amp;value={{ categoria.categoria_id }}&amp;computes=NAO_COMPUTA" aria-label="Ver lançamentos que não compõem a categoria {{ categoria.nome }}">
+            <div class="bar-label"><span class="indicator-detail-label">{{ categoria.nome }} <span class="category-computation-badge">Não compõe no resultado</span><svg class="indicator-detail-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></span><strong class="{{ categoria.valor|classe_valor:'saida' }}">{{ categoria.valor|brl_sinal }} · {{ categoria.percentual|floatformat:2 }}%</strong></div><div class="bar-track"><div class="bar-fill" style="width:{{ categoria.percentual_css }}%"></div></div>
+          </a>
+        {% endfor %}</div>{% else %}<p class="overview-empty">Nenhum gasto não computável neste filtro.</p>{% endif %}
+      </div>
+      <p class="overview-helper">Subcategorias são agrupadas pela categoria superior. A aba não computável é apenas consultiva e não altera o resultado.</p>
     </article>
     <article class="panel">
       <h2>Distribuição por natureza <span class="collapsible-summary-meta">Total · <span class="{{ total_distribuicao_natureza|classe_valor:'saida' }}">{{ total_distribuicao_natureza|brl }}</span></span></h2>
@@ -239,6 +253,7 @@
     const valuesStorageKey = 'my-financeiro.dashboard.values-hidden';
     const cashFlowPanel = document.querySelector('[data-cash-flow-panel]');
     const budgetOverviewPanel = document.querySelector('[data-budget-overview-panel]');
+    const categoryTabs = document.querySelector('[data-category-tabs]');
     const sensitiveValuePattern = /R\$\s*(?:[-−]?\s*)?[\d.]+,\d{2}|[-−]?\d+(?:,\d+)?%/g;
     let valuesHidden = false;
     try {
@@ -423,6 +438,35 @@
       });
     });
     const formatter = new Intl.NumberFormat('pt-BR', {style:'currency', currency:'BRL'});
+    if (categoryTabs) {
+      const tabs = [...categoryTabs.querySelectorAll('[data-category-tab]')];
+      const panels = [...categoryTabs.querySelectorAll('[data-category-panel]')];
+      const totals = [...categoryTabs.querySelectorAll('[data-category-total]')];
+      const activateCategoryTab = (tab, focus = false) => {
+        const value = tab.dataset.categoryTab;
+        tabs.forEach((item) => {
+          const active = item === tab;
+          item.setAttribute('aria-selected', String(active));
+          item.tabIndex = active ? 0 : -1;
+        });
+        panels.forEach((panel) => { panel.hidden = panel.dataset.categoryPanel !== value; });
+        totals.forEach((total) => { total.hidden = total.dataset.categoryTotal !== value; });
+        if (focus) tab.focus();
+      };
+      tabs.forEach((tab, index) => {
+        tab.addEventListener('click', () => activateCategoryTab(tab));
+        tab.addEventListener('keydown', (event) => {
+          let targetIndex = null;
+          if (event.key === 'ArrowRight') targetIndex = (index + 1) % tabs.length;
+          if (event.key === 'ArrowLeft') targetIndex = (index - 1 + tabs.length) % tabs.length;
+          if (event.key === 'Home') targetIndex = 0;
+          if (event.key === 'End') targetIndex = tabs.length - 1;
+          if (targetIndex === null) return;
+          event.preventDefault();
+          activateCategoryTab(tabs[targetIndex], true);
+        });
+      });
+    }
     const list = document.querySelector('[data-simulator-list]');
     const totalMonthly = document.querySelector('[data-saving-monthly-total]');
     const totalYearly = document.querySelector('[data-saving-yearly-total]');

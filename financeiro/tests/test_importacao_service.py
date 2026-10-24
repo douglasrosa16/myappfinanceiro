@@ -491,6 +491,23 @@ class ImportacaoServiceTests(TestCase):
         self.assertContains(resposta, "ciclo informado será mantido")
         self.assertEqual(lote.ciclo, "2026-09")
 
+    def test_revisao_cartao_calcula_ciclo_pelo_fechamento_e_vencimento(self):
+        self.cartao.dia_fechamento = 1
+        self.cartao.dia_vencimento = 9
+        self.cartao.save(update_fields=["dia_fechamento", "dia_vencimento"])
+        ofx = OFX_CARTAO.replace("20261010", "20261022").replace("02/12", "01/02")
+        lote = self.criar_lote(OFXParser.parse(ofx), ciclo="2026-10")
+        self.client.force_login(self.usuario)
+
+        resposta = self.client.get(f"/importar/{lote.pk}/revisao/")
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "ciclo esperado é 11/2026")
+        self.assertNotContains(resposta, "ciclo esperado é 12/2026")
+        self.assertContains(resposta, "Parcela 1/2")
+        self.assertContains(resposta, "ciclo informado será mantido")
+        self.assertEqual(lote.ciclo, "2026-10")
+
     def test_revisao_cartao_nao_avisa_quando_ciclo_da_parcela_corresponde(self):
         self.cartao.dia_fechamento = 25
         self.cartao.save(update_fields=["dia_fechamento"])

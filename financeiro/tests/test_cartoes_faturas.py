@@ -207,6 +207,32 @@ class CartoesFaturasServiceTests(TestCase):
         self.assertIn("vencimento (11/11/2026)", aviso_vencimento)
         self.assertIn("ciclo esperado é 11/2026", aviso_vencimento)
 
+    def test_aviso_de_ciclo_considera_vencimento_apos_fechamento_no_mesmo_mes(self):
+        self.cartao.dia_fechamento = 1
+        self.cartao.dia_vencimento = 9
+        self.cartao.save(update_fields=["dia_fechamento", "dia_vencimento"])
+
+        aviso_primeira = aviso_ciclo_cartao(
+            self.cartao,
+            date(2026, 10, 22),
+            "2026-10",
+            numero_parcela=1,
+            total_parcelas=2,
+        )
+
+        self.assertIn("ciclo esperado é 11/2026", aviso_primeira)
+        self.assertNotIn("ciclo esperado é 12/2026", aviso_primeira)
+        self.assertEqual(
+            aviso_ciclo_cartao(
+                self.cartao,
+                date(2026, 10, 22),
+                "2026-12",
+                numero_parcela=2,
+                total_parcelas=2,
+            ),
+            "",
+        )
+
     def test_conta_restringe_cartoes_e_descarta_cartao_incompativel(self):
         consulta = consultar_cartoes_faturas(
             self.usuario,

@@ -510,6 +510,7 @@ def consultar_lancamentos(
             cartao_id=cartao_id,
             origem={"CONTA": "account", "CARTAO": "card"}.get(origem, "all"),
             natureza=analysis_nature,
+            computacao=computa_resultado if computa_resultado != "all" else "COMPUTA",
             scope=analysis_scope,
             date_from=inicio,
             date_to=fim,

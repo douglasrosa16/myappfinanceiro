@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from calendar import monthrange
 from datetime import date
 from decimal import Decimal
 
@@ -33,6 +34,24 @@ def rotulo_ciclo(ciclo: str) -> str:
     return f"{mes}/{ano}"
 
 
+def _data_no_ciclo(ciclo: str, dia: int) -> date:
+    ano, mes = (int(parte) for parte in ciclo.split("-"))
+    return date(ano, mes, min(int(dia), monthrange(ano, mes)[1]))
+
+
+def _ciclo_primeiro_pagamento(cartao, data_compra: date) -> str:
+    ciclo_fechamento = f"{data_compra.year:04d}-{data_compra.month:02d}"
+    fechamento = _data_no_ciclo(ciclo_fechamento, cartao.dia_fechamento)
+    if data_compra > fechamento:
+        ciclo_fechamento = proximo_ciclo(ciclo_fechamento)
+        fechamento = _data_no_ciclo(ciclo_fechamento, cartao.dia_fechamento)
+
+    vencimento = _data_no_ciclo(ciclo_fechamento, cartao.dia_vencimento)
+    if vencimento <= fechamento:
+        return proximo_ciclo(ciclo_fechamento)
+    return ciclo_fechamento
+
+
 def calcular_totais_parcelas(parcelas) -> dict[str, Decimal]:
     """Calcula a composição confirmada e projetada de uma fatura."""
     total_confirmado = ZERO
@@ -64,9 +83,10 @@ def aviso_ciclo_cartao(
     """Informa divergência não bloqueante entre a referência da compra e o ciclo informado.
 
     O ciclo representa o mês de vencimento/pagamento. Um vencimento explícito é a
-    referência mais precisa; sem ele, o dia de fechamento estima em qual mês a
-    fatura será paga. O número da parcela só desloca a estimativa derivada da
-    compra, pois cada parcela já possui vencimento próprio quando ele é informado.
+    referência mais precisa; sem ele, os dias de fechamento e vencimento estimam
+    em qual mês a fatura será paga. O número da parcela só desloca a estimativa
+    derivada da compra, pois cada parcela já possui vencimento próprio quando ele
+    é informado.
     """
     if not cartao or not ciclo:
         return ""
@@ -75,9 +95,7 @@ def aviso_ciclo_cartao(
         ciclo_esperado = f"{vencimento.year:04d}-{vencimento.month:02d}"
         referencia = f"Com base no vencimento ({vencimento:%d/%m/%Y})"
     elif data_compra and cartao.dia_fechamento:
-        ciclo_compra = f"{data_compra.year:04d}-{data_compra.month:02d}"
-        meses_ate_pagamento = 1 if data_compra.day <= cartao.dia_fechamento else 2
-        ciclo_esperado = proximo_ciclo(ciclo_compra, meses_ate_pagamento)
+        ciclo_esperado = _ciclo_primeiro_pagamento(cartao, data_compra)
         referencia = f"Com base na data da compra ({data_compra:%d/%m/%Y})"
         if numero_parcela and numero_parcela > 1:
             ciclo_esperado = proximo_ciclo(ciclo_esperado, numero_parcela - 1)

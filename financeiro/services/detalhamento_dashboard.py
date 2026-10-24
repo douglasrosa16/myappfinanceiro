@@ -120,7 +120,12 @@ def _linha_detalhamento(contribuicoes: list[ContribuicaoAnalitica]) -> LinhaLanc
     )
 
 
-def _url_lancamentos(dados: dict, indicador: dict, ambito: str = "all") -> str:
+def _url_lancamentos(
+    dados: dict,
+    indicador: dict,
+    ambito: str = "all",
+    computacao: str = "COMPUTA",
+) -> str:
     filtros = dados["filtros"]
     parametros = {
         "date_from": dados["data_inicial"].strftime("%d/%m/%Y"),
@@ -131,20 +136,16 @@ def _url_lancamentos(dados: dict, indicador: dict, ambito: str = "all") -> str:
         "analysis_type": indicador["tipo"],
         "analysis_value": indicador["valor"],
         "analysis_nature": dados["natureza"],
+        "computes": computacao,
     }
     if ambito != "all":
         parametros["analysis_scope"] = ambito
     if indicador["tipo"] == "essentiality":
         parametros["essentiality"] = indicador["valor"]
-        parametros["computes"] = "COMPUTA"
     elif indicador["tipo"] == "category" and indicador["categoria_id"] is not None:
         parametros["parent_category"] = indicador["categoria_id"]
-        parametros["computes"] = "COMPUTA"
     elif indicador["tipo"] == "category_nature":
         parametros["category_nature"] = indicador["valor"]
-        parametros["computes"] = "COMPUTA"
-    elif indicador["tipo"] == "controllable":
-        parametros["computes"] = "COMPUTA"
     return f"{reverse('eventos')}?{urlencode(parametros)}"
 
 
@@ -157,11 +158,14 @@ def consultar_detalhamento_dashboard(
     cartao_id=None,
     origem="all",
     natureza="all",
+    computacao="COMPUTA",
     scope="all",
     date_from=None,
     date_to=None,
 ) -> dict:
     scope = scope if scope in Ambito.values else "all"
+    if computacao not in {"COMPUTA", "NAO_COMPUTA"}:
+        raise DetalhamentoDashboardInvalido("Escopo de resultado inválido.")
     dados = carregar_contribuicoes_dashboard(
         usuario,
         periodo=periodo,
@@ -169,6 +173,7 @@ def consultar_detalhamento_dashboard(
         cartao_id=cartao_id,
         origem=origem,
         natureza=natureza,
+        computacao=computacao,
         date_from=date_from,
         date_to=date_to,
     )
@@ -183,7 +188,14 @@ def consultar_detalhamento_dashboard(
         for contribuicoes in agrupadas.values()
         if (linha := _linha_detalhamento(contribuicoes)) is not None
     ]
-    linhas.sort(key=lambda item: (item.data_referencia, item.origem, item.registro_id), reverse=True)
+    linhas.sort(
+        key=lambda item: (
+            item.data_original,
+            item.evento_id,
+            item.origem,
+            item.registro_id,
+        )
+    )
     total = sum((linha.valor for linha in linhas), ZERO)
     return {
         "titulo_detalhamento": indicador["rotulo"],
@@ -191,10 +203,11 @@ def consultar_detalhamento_dashboard(
         "analysis_value": indicador["valor"],
         "analysis_nature": dados["natureza"],
         "analysis_scope": scope,
+        "computes": computacao,
         "linhas": linhas,
         "total_registros": len(linhas),
         "total_indicador": total,
         "data_inicial": dados["data_inicial"],
         "data_final": dados["data_final"],
-        "lancamentos_url": _url_lancamentos(dados, indicador, scope),
+        "lancamentos_url": _url_lancamentos(dados, indicador, scope, computacao),
     }

@@ -783,6 +783,65 @@ class DashboardServiceTests(TestCase):
         self.assertEqual(consulta["resumo"]["despesas"], Decimal("100.00"))
         self.assertEqual(consulta["total_gastos_por_categoria"], Decimal("100.00"))
 
+    def test_categorias_nao_computaveis_tem_aba_propria_sem_alterar_resultado(self):
+        investimentos = Categoria.objects.create(
+            usuario=self.usuario,
+            nome="Investimentos",
+            tipo=Categoria.Tipo.DESPESA,
+        )
+        aplicacoes = Categoria.objects.create(
+            usuario=self.usuario,
+            nome="Aplicações",
+            tipo=Categoria.Tipo.DESPESA,
+            categoria_pai=investimentos,
+            computa_resultado=False,
+        )
+        cursos = Categoria.objects.create(
+            usuario=self.usuario,
+            nome="Cursos",
+            tipo=Categoria.Tipo.DESPESA,
+            computa_resultado=False,
+        )
+        transferencia = Categoria.objects.create(
+            usuario=self.usuario,
+            nome="Entre contas",
+            tipo=Categoria.Tipo.TRANSFERENCIA,
+            computa_resultado=False,
+        )
+
+        rateado = self.movimento("-100.00")
+        RateioCategoria.objects.create(evento=rateado.evento, categoria=self.alimentacao, valor=Decimal("40.00"))
+        RateioCategoria.objects.create(evento=rateado.evento, categoria=aplicacoes, valor=Decimal("60.00"))
+        self.parcela("50.00", categoria=aplicacoes)
+        self.movimento("10.00", natureza=NaturezaEvento.ESTORNO, categoria=aplicacoes)
+        self.movimento("-50.00", categoria=cursos)
+        self.movimento("-900.00", natureza=NaturezaEvento.TRANSFERENCIA, categoria=transferencia)
+        self.movimento("-800.00", natureza=NaturezaEvento.PAGAMENTO_FATURA, categoria=transferencia)
+
+        consulta = consultar_dashboard(self.usuario, periodo="2026-10")
+        detalhe = consultar_detalhamento_dashboard(
+            self.usuario,
+            "category",
+            str(investimentos.pk),
+            periodo="2026-10",
+            computacao="NAO_COMPUTA",
+        )
+
+        computaveis = {item["nome"]: item for item in consulta["gastos_por_categoria"]}
+        nao_computaveis = {item["nome"]: item for item in consulta["gastos_por_categoria_nao_computa"]}
+        self.assertEqual(consulta["resumo"]["despesas"], Decimal("40.00"))
+        self.assertEqual(consulta["total_gastos_por_categoria"], Decimal("40.00"))
+        self.assertEqual(computaveis["Alimentação fora"]["valor"], Decimal("40.00"))
+        self.assertEqual(consulta["total_gastos_por_categoria_nao_computa"], Decimal("150.00"))
+        self.assertEqual(nao_computaveis["Investimentos"]["valor"], Decimal("100.00"))
+        self.assertEqual(nao_computaveis["Investimentos"]["percentual"], Decimal("66.67"))
+        self.assertEqual(nao_computaveis["Cursos"]["valor"], Decimal("50.00"))
+        self.assertEqual(nao_computaveis["Cursos"]["percentual"], Decimal("33.33"))
+        self.assertNotIn("Entre contas", nao_computaveis)
+        self.assertEqual(detalhe["total_indicador"], Decimal("100.00"))
+        self.assertEqual(detalhe["computes"], "NAO_COMPUTA")
+        self.assertEqual(parse_qs(urlsplit(detalhe["lancamentos_url"]).query)["computes"], ["NAO_COMPUTA"])
+
     def test_estorno_rateado_usa_apenas_categoria_de_despesa_e_pode_gerar_total_negativo(self):
         categoria_pai = Categoria.objects.create(usuario=self.usuario, nome="Tarifas")
         categoria_filha = Categoria.objects.create(
@@ -993,6 +1052,39 @@ class DashboardServiceTests(TestCase):
         self.assertEqual([linha.registro_id for linha in detalhe["linhas"]], [parcela_outubro.pk])
         self.assertEqual(detalhe["linhas"][0].data_original, date(2026, 9, 15))
         self.assertEqual(detalhe["total_indicador"], Decimal("50.00"))
+
+    def test_detalhamento_ordena_compras_por_data_original_e_id_do_lancamento(self):
+        primeira = self.parcela(
+            "10.00",
+            categoria=self.alimentacao,
+            ciclo="2026-10",
+            data_original=date(2026, 9, 10),
+        )
+        segunda = self.parcela(
+            "20.00",
+            categoria=self.alimentacao,
+            ciclo="2026-10",
+            data_original=date(2026, 9, 10),
+        )
+        posterior = self.parcela(
+            "30.00",
+            categoria=self.alimentacao,
+            ciclo="2026-10",
+            data_original=date(2026, 9, 20),
+        )
+
+        detalhe = consultar_detalhamento_dashboard(
+            self.usuario,
+            "category",
+            str(self.alimentacao.pk),
+            periodo="2026-10",
+            origem="card",
+        )
+
+        self.assertEqual(
+            [linha.registro_id for linha in detalhe["linhas"]],
+            [primeira.pk, segunda.pk, posterior.pk],
+        )
 
     def test_compromissos_usam_data_atual_e_janela_de_trinta_dias(self):
         Titulo.objects.create(
@@ -1584,6 +1676,72 @@ class LancamentoDashboardTests(TestCase):
         self.assertContains(resposta, ".commitment-cards,.cash-grid,.budget-list{grid-template-columns:1fr}")
         self.assertContains(formulario, 'data-lancamento-form')
         self.assertContains(formulario, 'name="origem"')
+
+    def test_dashboard_renderiza_abas_acessiveis_de_categorias_e_escopo_nao_computavel(self):
+        superior = Categoria.objects.create(usuario=self.usuario, nome="Investimentos")
+        aplicacoes = Categoria.objects.create(
+            usuario=self.usuario,
+            nome="Aplicações",
+            categoria_pai=superior,
+            computa_resultado=False,
+        )
+        criar_lancamento(self.usuario, self.dados(categoria=aplicacoes))
+
+        resposta = self.client.get(reverse("dashboard"), {"period": "2026-10"})
+
+        self.assertContains(resposta, 'role="tablist"')
+        self.assertContains(resposta, 'id="categoryTabComputa"')
+        self.assertContains(resposta, 'aria-selected="true"')
+        self.assertContains(resposta, 'id="categoryPanelNaoComputa"')
+        self.assertContains(resposta, 'data-category-panel="NAO_COMPUTA" hidden')
+        self.assertContains(resposta, "Compõe no resultado")
+        self.assertContains(resposta, "Não compõe no resultado")
+        self.assertContains(resposta, "Ver lançamentos que não compõem a categoria Investimentos")
+        self.assertContains(resposta, "Investimentos")
+        self.assertContains(resposta, "computes=NAO_COMPUTA", count=2)
+        self.assertContains(resposta, "ArrowRight")
+        self.assertContains(resposta, "ArrowLeft")
+
+    def test_endpoint_e_listagem_detalham_categoria_nao_computavel(self):
+        superior = Categoria.objects.create(usuario=self.usuario, nome="Investimentos")
+        aplicacoes = Categoria.objects.create(
+            usuario=self.usuario,
+            nome="Aplicações",
+            categoria_pai=superior,
+            computa_resultado=False,
+        )
+        criar_lancamento(self.usuario, self.dados(categoria=aplicacoes, valor=Decimal("125.00")))
+
+        detalhe = self.client.get(
+            reverse("dashboard_detalhamento"),
+            {
+                "type": "category",
+                "value": superior.pk,
+                "period": "2026-10",
+                "computes": "NAO_COMPUTA",
+            },
+        )
+        listagem = self.client.get(
+            reverse("eventos"),
+            {
+                "period": "2026-10",
+                "analysis_type": "category",
+                "analysis_value": superior.pk,
+                "parent_category": superior.pk,
+                "computes": "NAO_COMPUTA",
+            },
+        )
+        invalido = self.client.get(
+            reverse("dashboard_detalhamento"),
+            {"type": "category", "value": superior.pk, "computes": "INVALIDO"},
+        )
+
+        self.assertEqual(detalhe.status_code, 200)
+        self.assertContains(detalhe, "R$ 125,00")
+        self.assertContains(detalhe, "computes=NAO_COMPUTA")
+        self.assertContains(listagem, "Aplicações")
+        self.assertContains(listagem, "R$ 125,00")
+        self.assertEqual(invalido.status_code, 404)
 
     def test_dashboard_renderiza_controle_de_ocultacao_de_valores(self):
         resposta = self.client.get(reverse("dashboard"), {"period": "2026-10"})
