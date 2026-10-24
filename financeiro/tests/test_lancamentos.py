@@ -1143,6 +1143,9 @@ class LancamentosViewTests(TestCase):
         self.assertIn("date_from=01%2F10%2F2026", conteudo)
         self.assertIn("person=", conteudo)
         self.assertContains(resposta, "Todos os ciclos")
+        self.assertContains(resposta, "Compõe e não compõe")
+        self.assertContains(resposta, ">Compõe</option>")
+        self.assertContains(resposta, ">Não compõe</option>")
         self.assertContains(resposta, 'placeholder="DD/MM/AAAA"', count=2)
 
     def test_lista_colore_entradas_e_saidas(self):

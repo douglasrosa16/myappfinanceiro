@@ -151,6 +151,7 @@ def dashboard_detalhamento(request):
             cartao_id=request.GET.get("card"),
             origem=request.GET.get("origin", "all"),
             natureza=request.GET.get("nature", "all"),
+            computacao=request.GET.get("computes", "COMPUTA"),
             scope=request.GET.get("scope", "all"),
         )
     except DetalhamentoDashboardInvalido as exc:

@@ -36,6 +36,7 @@ ZERO = Decimal("0.00")
 HUNDRED = Decimal("100")
 ORIGENS = {"all", "account", "card"}
 NATUREZAS_ANALITICAS = {"all", "personal", "business"}
+COMPUTACOES_ANALITICAS = {"COMPUTA", "NAO_COMPUTA"}
 ESSENCIALIDADES_COMPOSICAO = (
     Categoria.Essencialidade.ESSENCIAL,
     Categoria.Essencialidade.NECESSARIO_VARIAVEL,
@@ -244,6 +245,7 @@ def _criar_contribuicao_analitica(
     natureza_evento: str,
     categoria: Categoria | None,
     filtro_natureza: str,
+    computacao: str = "COMPUTA",
 ) -> ContribuicaoAnalitica | None:
     if natureza_evento in {NaturezaEvento.PAGAMENTO_FATURA, NaturezaEvento.TRANSFERENCIA}:
         return None
@@ -251,7 +253,17 @@ def _criar_contribuicao_analitica(
         not categoria or categoria.tipo != Categoria.Tipo.DESPESA
     ):
         return None
-    if categoria and (not categoria.computa_resultado or not _natureza_compativel(categoria, filtro_natureza)):
+    if computacao == "NAO_COMPUTA":
+        if (
+            natureza_evento not in {NaturezaEvento.DESPESA, NaturezaEvento.ESTORNO}
+            or not categoria
+            or categoria.computa_resultado
+            or categoria.tipo != Categoria.Tipo.DESPESA
+        ):
+            return None
+    elif categoria and not categoria.computa_resultado:
+        return None
+    if categoria and not _natureza_compativel(categoria, filtro_natureza):
         return None
     if not categoria and filtro_natureza != "all":
         return None
@@ -310,7 +322,9 @@ def gerar_contribuicoes_analiticas(
     parcelas: list[ParcelaCartao],
     origem: str,
     filtro_natureza: str,
+    computacao: str = "COMPUTA",
 ) -> list[ContribuicaoAnalitica]:
+    computacao = computacao if computacao in COMPUTACOES_ANALITICAS else "COMPUTA"
     contribuicoes = []
     if origem != "card":
         for movimento in movimentos:
@@ -328,6 +342,7 @@ def gerar_contribuicoes_analiticas(
                     movimento.evento.natureza,
                     categoria,
                     filtro_natureza,
+                    computacao,
                 )
                 if contribuicao:
                     contribuicoes.append(contribuicao)
@@ -341,6 +356,7 @@ def gerar_contribuicoes_analiticas(
                 parcela.natureza_exibicao,
                 parcela.categoria,
                 filtro_natureza,
+                computacao,
             )
             if contribuicao:
                 contribuicoes.append(contribuicao)
@@ -996,6 +1012,7 @@ def carregar_contribuicoes_dashboard(
     cartao_id=None,
     origem="all",
     natureza="all",
+    computacao="COMPUTA",
     date_from=None,
     date_to=None,
 ) -> dict:
@@ -1024,7 +1041,13 @@ def carregar_contribuicoes_dashboard(
         "parcelas_carregadas": parcelas_carregadas,
         "movimentos": movimentos,
         "parcelas": parcelas,
-        "contribuicoes": gerar_contribuicoes_analiticas(movimentos, parcelas, origem, natureza),
+        "contribuicoes": gerar_contribuicoes_analiticas(
+            movimentos,
+            parcelas,
+            origem,
+            natureza,
+            computacao,
+        ),
     }
 
 
@@ -1061,6 +1084,16 @@ def consultar_dashboard(
     movimentos_atual = dados_analiticos["movimentos"]
     parcelas_atual = dados_analiticos["parcelas"]
     analise_atual = _analisar_contribuicoes(dados_analiticos["contribuicoes"], categorias)
+    analise_nao_computavel = _analisar_contribuicoes(
+        gerar_contribuicoes_analiticas(
+            movimentos_atual,
+            parcelas_atual,
+            origem,
+            natureza,
+            "NAO_COMPUTA",
+        ),
+        categorias,
+    )
 
     inicio_anterior, fim_anterior = _intervalo_anterior(data_inicial, data_final)
     analise_anterior = _analisar_dados(
@@ -1086,10 +1119,15 @@ def consultar_dashboard(
     fatura = totais_fatura["projetado"]
     fatura_confirmada = totais_fatura["confirmado"]
     categorias_formatadas = _categorias_formatadas(analise_atual)
+    categorias_nao_computaveis = _categorias_formatadas(analise_nao_computavel)
     composicao = _composicao_formatada(analise_atual)
     distribuicao = _natureza_formatada(analise_atual)
     total_composicao = sum((item["valor"] for item in composicao), ZERO)
     total_categorias = sum((item["valor"] for item in categorias_formatadas), ZERO)
+    total_categorias_nao_computaveis = sum(
+        (item["valor"] for item in categorias_nao_computaveis),
+        ZERO,
+    )
     total_distribuicao = sum((item["valor"] for item in distribuicao), ZERO)
     gastos_controlaveis = sum(
         (valor for tipo, valor in analise_atual["essencialidade"].items() if tipo in {
@@ -1183,6 +1221,8 @@ def consultar_dashboard(
         },
         "gastos_por_categoria": categorias_formatadas,
         "total_gastos_por_categoria": total_categorias,
+        "gastos_por_categoria_nao_computa": categorias_nao_computaveis,
+        "total_gastos_por_categoria_nao_computa": total_categorias_nao_computaveis,
         "categorias": categorias_formatadas,
         "distribuicao_natureza": distribuicao,
         "total_distribuicao_natureza": total_distribuicao,

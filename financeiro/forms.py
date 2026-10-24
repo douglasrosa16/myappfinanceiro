@@ -200,7 +200,7 @@ class CategoriaForm(forms.ModelForm):
         ]
         labels = {
             "categoria_pai": "Categoria superior",
-            "computa_resultado": "Computa no resultado",
+            "computa_resultado": "Compõe no resultado",
             "ativa": "Situação ativa",
         }
         help_texts = {
