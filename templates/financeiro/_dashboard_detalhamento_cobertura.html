@@ -33,9 +33,78 @@
     </div>
   </div>
 
-  <section class="coverage-detail-section" aria-labelledby="coverageRevenueTitle">
-    <h4 id="coverageRevenueTitle">Receitas</h4>
-    <div class="coverage-detail-table-wrap">
+  <details class="coverage-detail-section coverage-detail-accordion coverage-category-section" open aria-labelledby="coverageCategoryTitle">
+    <summary class="coverage-detail-section-summary">
+      <div>
+        <h4 id="coverageCategoryTitle">Composição por categoria</h4>
+        <small>Visão gerencial por competência</small>
+      </div>
+      <span class="coverage-detail-section-meta">Receitas e despesas</span>
+      <span class="coverage-section-toggle" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>
+    </summary>
+    <div class="coverage-detail-section-content">
+      <p class="small">As despesas consideram os gastos da conta pela data do evento e as compras no cartão integralmente pela data da compra. Pagamentos e obrigações de fatura ficam fora desta composição para evitar duplicidade.</p>
+      <div class="coverage-category-blocks">
+        {% for bloco in composicao_categorias %}
+          <section class="coverage-category-block" aria-labelledby="coverageCategoryBlock{{ bloco.codigo }}">
+            <div class="coverage-category-block-head">
+              <div><h5 id="coverageCategoryBlock{{ bloco.codigo }}">{{ bloco.rotulo }}</h5><small>{{ bloco.total_registros }} registros</small></div>
+              <strong class="{% if bloco.codigo == 'DESPESAS' %}{{ bloco.total|classe_valor:'saida' }}{% else %}{{ bloco.total|classe_valor }}{% endif %}">{{ bloco.total|brl_sinal }}</strong>
+            </div>
+            {% if bloco.categorias %}
+              <div class="coverage-category-list">
+                {% for categoria in bloco.categorias %}
+                  <details class="coverage-category-group">
+                    <summary class="coverage-category-summary" aria-label="Expandir categoria {{ categoria.nome }}">
+                      <span class="coverage-category-name"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg><span>{{ categoria.nome }}<small>{{ categoria.total_registros }} registros</small></span></span>
+                      <span class="coverage-category-values"><strong class="{% if bloco.codigo == 'DESPESAS' %}{{ categoria.valor|classe_valor:'saida' }}{% else %}{{ categoria.valor|classe_valor }}{% endif %}">{{ categoria.valor|brl_sinal }}</strong><small>{{ categoria.percentual|floatformat:2 }}%</small></span>
+                    </summary>
+                    <div class="coverage-category-progress" aria-hidden="true"><span style="width:{{ categoria.percentual_css }}%"></span></div>
+                    <div class="coverage-subcategory-list">
+                      {% for subcategoria in categoria.subcategorias %}
+                        <details class="coverage-subcategory-group">
+                          <summary class="coverage-subcategory-summary" aria-label="Expandir lançamentos de {{ subcategoria.nome }}">
+                            <span class="coverage-subcategory-name"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg><span>{{ subcategoria.nome }}{% if subcategoria.nao_computa_resultado %}<small class="coverage-computation-badge">Não compõe no resultado</small>{% endif %}</span></span>
+                            <span><small>{{ subcategoria.total_registros }} registros</small><strong class="{% if bloco.codigo == 'DESPESAS' %}{{ subcategoria.valor|classe_valor:'saida' }}{% else %}{{ subcategoria.valor|classe_valor }}{% endif %}">{{ subcategoria.valor|brl_sinal }}</strong></span>
+                          </summary>
+                          <div class="coverage-detail-table-wrap coverage-category-launches">
+                            <table class="coverage-detail-table">
+                              <thead><tr><th>Data</th><th>Descrição</th><th>Origem</th><th>Situação</th><th class="money">Valor reconhecido</th></tr></thead>
+                              <tbody>
+                                {% for lancamento in subcategoria.lancamentos %}
+                                  <tr>
+                                    <td>{{ lancamento.data|date:"d/m/Y" }}</td>
+                                    <td>{{ lancamento.descricao }}{% if lancamento.estimado %}<span class="coverage-estimated">Estimado</span>{% endif %}{% if lancamento.observacao %}<small>{{ lancamento.observacao }}</small>{% endif %}</td>
+                                    <td><span class="coverage-origin-badge{% if lancamento.compra_cartao %} is-card{% endif %}">{{ lancamento.origem_rotulo }}</span><small>{{ lancamento.origem_nome }}</small></td>
+                                    <td>{{ lancamento.situacao }}</td>
+                                    <td class="money {% if bloco.codigo == 'DESPESAS' %}{{ lancamento.valor|classe_valor:'saida' }}{% else %}{{ lancamento.valor|classe_valor }}{% endif %}">{{ lancamento.valor|brl_sinal }}</td>
+                                  </tr>
+                                {% endfor %}
+                              </tbody>
+                            </table>
+                          </div>
+                        </details>
+                      {% endfor %}
+                    </div>
+                  </details>
+                {% endfor %}
+              </div>
+            {% else %}
+              <p class="coverage-category-empty">Nenhum lançamento para classificar neste grupo.</p>
+            {% endif %}
+          </section>
+        {% endfor %}
+      </div>
+    </div>
+  </details>
+
+  <details class="coverage-detail-section coverage-detail-accordion" aria-labelledby="coverageRevenueTitle">
+    <summary class="coverage-detail-section-summary">
+      <h4 id="coverageRevenueTitle">Receitas</h4>
+      <span class="coverage-detail-section-meta">{{ receitas.itens|length }} registros · <strong class="{{ receitas.total|classe_valor }}">{{ receitas.total|brl_sinal }}</strong></span>
+      <span class="coverage-section-toggle" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>
+    </summary>
+    <div class="coverage-detail-section-content coverage-detail-table-wrap">
       <table class="coverage-detail-table">
         <thead><tr><th>Data</th><th>Descrição</th><th>Origem</th><th>Situação</th><th class="money">Valor</th></tr></thead>
         <tbody>
@@ -47,11 +116,15 @@
         </tbody>
       </table>
     </div>
-  </section>
+  </details>
 
-  <section class="coverage-detail-section" aria-labelledby="coverageExpenseTitle">
-    <h4 id="coverageExpenseTitle">Saídas e obrigações da conta</h4>
-    <div class="coverage-detail-table-wrap">
+  <details class="coverage-detail-section coverage-detail-accordion" aria-labelledby="coverageExpenseTitle">
+    <summary class="coverage-detail-section-summary">
+      <h4 id="coverageExpenseTitle">Saídas e obrigações da conta</h4>
+      <span class="coverage-detail-section-meta">{{ saidas.itens|length }} registros · <strong class="{{ saidas.total|classe_valor:'saida' }}">{{ saidas.total|brl_sinal }}</strong></span>
+      <span class="coverage-section-toggle" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>
+    </summary>
+    <div class="coverage-detail-section-content coverage-detail-table-wrap">
       <table class="coverage-detail-table">
         <thead><tr><th>Data</th><th>Descrição</th><th>Origem</th><th>Situação</th><th class="money">Valor</th></tr></thead>
         <tbody>
@@ -63,11 +136,15 @@
         </tbody>
       </table>
     </div>
-  </section>
+  </details>
 
-  <section class="coverage-detail-section" aria-labelledby="coverageCardTitle">
-    <h4 id="coverageCardTitle">Compras no cartão pela data da compra</h4>
-    <div class="coverage-detail-table-wrap">
+  <details class="coverage-detail-section coverage-detail-accordion" aria-labelledby="coverageCardTitle">
+    <summary class="coverage-detail-section-summary">
+      <h4 id="coverageCardTitle">Compras no cartão pela data da compra</h4>
+      <span class="coverage-detail-section-meta">{{ compras_cartao.itens|length }} registros · <strong class="{{ compras_cartao.total|classe_valor:'saida' }}">{{ compras_cartao.total|brl_sinal }}</strong></span>
+      <span class="coverage-section-toggle" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>
+    </summary>
+    <div class="coverage-detail-section-content coverage-detail-table-wrap">
       <table class="coverage-detail-table">
         <thead><tr><th>Data</th><th>Compra</th><th>Cartão</th><th>Situação</th><th class="money">Valor integral</th></tr></thead>
         <tbody>
@@ -79,22 +156,28 @@
         </tbody>
       </table>
     </div>
-  </section>
+  </details>
 
-  <section class="coverage-detail-section" aria-labelledby="coverageEvolutionTitle">
-    <h4 id="coverageEvolutionTitle">Evolução diária contrafactual</h4>
-    <p class="small">As compras no cartão são tratadas como se tivessem sido pagas à vista na data da compra.</p>
-    <div class="coverage-detail-table-wrap">
-      <table class="coverage-detail-table coverage-daily-table">
-        <thead><tr><th>Data</th><th class="money">Receitas</th><th class="money">Saídas</th><th class="money">Cartão</th><th class="money">Saldo pela renda</th><th class="money">Saldo com recursos</th></tr></thead>
-        <tbody>
-          {% for linha in evolucao_diaria %}
-            <tr><td>{{ linha.data|date:"d/m/Y" }}</td><td class="money {{ linha.receitas|classe_valor }}">{{ linha.receitas|brl_sinal }}</td><td class="money {{ linha.saidas|classe_valor:'saida' }}">{{ linha.saidas|brl_sinal }}</td><td class="money {{ linha.compras|classe_valor:'saida' }}">{{ linha.compras|brl_sinal }}</td><td class="money {{ linha.saldo_renda|classe_valor }}">{{ linha.saldo_renda|brl_sinal }}</td><td class="money {{ linha.saldo_com_saldo|classe_valor }}">{{ linha.saldo_com_saldo|brl_sinal }}</td></tr>
-          {% empty %}
-            <tr><td colspan="6" class="empty">Não houve movimentos para compor a evolução diária.</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
+  <details class="coverage-detail-section coverage-detail-accordion" aria-labelledby="coverageEvolutionTitle">
+    <summary class="coverage-detail-section-summary">
+      <h4 id="coverageEvolutionTitle">Evolução diária contrafactual</h4>
+      <span class="coverage-detail-section-meta">{{ evolucao_diaria|length }} datas com movimento</span>
+      <span class="coverage-section-toggle" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>
+    </summary>
+    <div class="coverage-detail-section-content">
+      <p class="small">As compras no cartão são tratadas como se tivessem sido pagas à vista na data da compra.</p>
+      <div class="coverage-detail-table-wrap">
+        <table class="coverage-detail-table coverage-daily-table">
+          <thead><tr><th>Data</th><th class="money">Receitas</th><th class="money">Saídas</th><th class="money">Cartão</th><th class="money">Saldo pela renda</th><th class="money">Saldo com recursos</th></tr></thead>
+          <tbody>
+            {% for linha in evolucao_diaria %}
+              <tr><td>{{ linha.data|date:"d/m/Y" }}</td><td class="money {{ linha.receitas|classe_valor }}">{{ linha.receitas|brl_sinal }}</td><td class="money {{ linha.saidas|classe_valor:'saida' }}">{{ linha.saidas|brl_sinal }}</td><td class="money {{ linha.compras|classe_valor:'saida' }}">{{ linha.compras|brl_sinal }}</td><td class="money {{ linha.saldo_renda|classe_valor }}">{{ linha.saldo_renda|brl_sinal }}</td><td class="money {{ linha.saldo_com_saldo|classe_valor }}">{{ linha.saldo_com_saldo|brl_sinal }}</td></tr>
+            {% empty %}
+              <tr><td colspan="6" class="empty">Não houve movimentos para compor a evolução diária.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
     </div>
-  </section>
+  </details>
 </section>

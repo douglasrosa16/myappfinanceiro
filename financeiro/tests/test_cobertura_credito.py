@@ -162,6 +162,68 @@ class CoberturaCreditoTests(TestCase):
         self.assertEqual(novembro["cobertura_credito"]["compras_cartao"]["total"], Decimal("0.00"))
         self.assertEqual(outubro["resumo"]["despesas"], Decimal("250.00"))
         self.assertEqual(novembro["resumo"]["despesas"], Decimal("250.00"))
+        despesas_outubro = next(
+            bloco
+            for bloco in outubro["cobertura_credito"]["composicao_categorias"]
+            if bloco["codigo"] == "DESPESAS"
+        )
+        despesas_novembro = next(
+            bloco
+            for bloco in novembro["cobertura_credito"]["composicao_categorias"]
+            if bloco["codigo"] == "DESPESAS"
+        )
+        self.assertEqual(despesas_outubro["total"], Decimal("1000.00"))
+        self.assertEqual(despesas_novembro["total"], Decimal("0.00"))
+        lancamento = despesas_outubro["categorias"][0]["subcategorias"][0]["lancamentos"][0]
+        self.assertTrue(lancamento["compra_cartao"])
+        self.assertEqual(lancamento["origem_rotulo"], "Compra no cartão")
+        self.assertEqual(lancamento["origem_nome"], "Cartão principal")
+
+    def test_pagamento_da_fatura_nao_repete_compras_na_composicao_do_mes_seguinte(self):
+        compra = self.compra(
+            "1114.30",
+            date(2026, 9, 20),
+            categoria=self.categoria_pessoal,
+        )
+        fatura = compra.parcelas.get(numero=1).fatura
+        titulo = Titulo.objects.create(
+            usuario=self.usuario,
+            tipo=Titulo.Tipo.PAGAR,
+            descricao="Fatura Cartão principal 2026-10",
+            vencimento=date(2026, 10, 13),
+            valor_original=Decimal("1114.30"),
+            saldo_aberto=Decimal("0.00"),
+            status=Titulo.Status.LIQUIDADO,
+            conta=self.conta,
+            fatura=fatura,
+        )
+        movimento = self.movimento(
+            "-1114.30",
+            date(2026, 10, 13),
+            natureza=NaturezaEvento.PAGAMENTO_FATURA,
+            descricao="Fatura Cartão principal 2026-10",
+        )
+        Liquidacao.objects.create(
+            titulo=titulo,
+            movimento_conta=movimento,
+            valor=Decimal("1114.30"),
+            data=date(2026, 10, 13),
+        )
+
+        setembro = consultar_dashboard(self.usuario, periodo="2026-09")["cobertura_credito"]
+        outubro = consultar_dashboard(self.usuario, periodo="2026-10")["cobertura_credito"]
+        despesas_setembro = next(
+            bloco for bloco in setembro["composicao_categorias"] if bloco["codigo"] == "DESPESAS"
+        )
+        despesas_outubro = next(
+            bloco for bloco in outubro["composicao_categorias"] if bloco["codigo"] == "DESPESAS"
+        )
+
+        self.assertEqual(despesas_setembro["total"], Decimal("1114.30"))
+        self.assertEqual(despesas_setembro["categorias"][0]["nome"], "Pessoal")
+        self.assertEqual(despesas_outubro["total"], Decimal("0.00"))
+        self.assertEqual(despesas_outubro["categorias"], [])
+        self.assertEqual(outubro["saidas"]["realizados"], Decimal("1114.30"))
 
     def test_compra_incompleta_usa_total_explicito_e_marca_projecao_estimada(self):
         self.compra(
@@ -180,11 +242,21 @@ class CoberturaCreditoTests(TestCase):
             valor_total_estimado=True,
         )
 
-        compras = consultar_dashboard(self.usuario, periodo="2026-10")["cobertura_credito"]["compras_cartao"]
+        cobertura = consultar_dashboard(self.usuario, periodo="2026-10")["cobertura_credito"]
+        compras = cobertura["compras_cartao"]
 
         self.assertEqual(compras["total"], Decimal("1500.00"))
         self.assertFalse(compras["itens"][0]["estimado"])
         self.assertTrue(compras["itens"][1]["estimado"])
+        despesas = next(
+            bloco for bloco in cobertura["composicao_categorias"] if bloco["codigo"] == "DESPESAS"
+        )
+        categoria = next(item for item in despesas["categorias"] if item["nome"] == "Pessoal")
+        self.assertEqual(categoria["valor"], Decimal("1500.00"))
+        self.assertEqual(
+            [item["estimado"] for item in categoria["subcategorias"][0]["lancamentos"]],
+            [False, True],
+        )
 
     def test_faturas_paga_parcial_e_pendente_nao_duplicam_obrigacoes(self):
         def criar_titulo(ciclo, vencimento, original, saldo, status, pago):
@@ -222,11 +294,17 @@ class CoberturaCreditoTests(TestCase):
         criar_titulo("2026-11", date(2026, 10, 10), "3000.00", "1000.00", Titulo.Status.ABERTO, "2000.00")
         criar_titulo("2026-12", date(2026, 10, 15), "3000.00", "3000.00", Titulo.Status.ABERTO, "0.00")
 
-        saidas = consultar_dashboard(self.usuario, periodo="2026-10")["cobertura_credito"]["saidas"]
+        cobertura = consultar_dashboard(self.usuario, periodo="2026-10")["cobertura_credito"]
+        saidas = cobertura["saidas"]
+        despesas = next(
+            bloco for bloco in cobertura["composicao_categorias"] if bloco["codigo"] == "DESPESAS"
+        )
 
         self.assertEqual(saidas["realizados"], Decimal("5000.00"))
         self.assertEqual(saidas["previstos"], Decimal("4000.00"))
         self.assertEqual(saidas["total"], Decimal("9000.00"))
+        self.assertEqual(despesas["total"], Decimal("0.00"))
+        self.assertEqual(despesas["categorias"], [])
 
     def test_estorno_reduz_cancelamento_nao_entra_e_previsto_fica_separado(self):
         self.compra("1000.00", date(2026, 10, 2), categoria=self.categoria_pessoal)
@@ -353,6 +431,147 @@ class CoberturaCreditoTests(TestCase):
         self.assertEqual(pessoal["cobertura_credito"]["compras_cartao"]["total"], Decimal("200.00"))
         self.assertEqual(filtrado["cobertura_credito"]["compras_cartao"]["total"], Decimal("200.00"))
 
+    def test_composicao_consolida_receitas_e_despesas_com_hierarquia_e_origem(self):
+        categoria_receita = Categoria.objects.create(
+            usuario=self.usuario,
+            nome="Receitas do trabalho",
+            tipo=Categoria.Tipo.RECEITA,
+            natureza=Categoria.Natureza.PESSOAL,
+        )
+        categoria_casa = Categoria.objects.create(
+            usuario=self.usuario,
+            nome="Casa",
+            natureza=Categoria.Natureza.PESSOAL,
+        )
+        categoria_mercado = Categoria.objects.create(
+            usuario=self.usuario,
+            nome="Mercado",
+            categoria_pai=categoria_casa,
+            natureza=Categoria.Natureza.PESSOAL,
+        )
+        categoria_consultiva = Categoria.objects.create(
+            usuario=self.usuario,
+            nome="Consultiva",
+            natureza=Categoria.Natureza.PESSOAL,
+            computa_resultado=False,
+        )
+        self.movimento(
+            "1000.00",
+            date(2026, 10, 1),
+            categoria=categoria_receita,
+            descricao="Receita direta",
+        )
+        self.movimento(
+            "-200.00",
+            date(2026, 10, 5),
+            categoria=categoria_mercado,
+            descricao="Mercado na conta",
+        )
+        self.compra("300.00", date(2026, 10, 6), categoria=categoria_mercado)
+        self.movimento("-50.00", date(2026, 10, 7), descricao="Sem categoria")
+        self.compra("75.00", date(2026, 10, 8), categoria=categoria_consultiva)
+
+        cobertura = consultar_dashboard(self.usuario, periodo="2026-10")["cobertura_credito"]
+        blocos = {bloco["codigo"]: bloco for bloco in cobertura["composicao_categorias"]}
+
+        self.assertEqual(list(blocos), ["RECEITAS", "DESPESAS"])
+        self.assertEqual(blocos["RECEITAS"]["total"], cobertura["receitas"]["total"])
+        self.assertEqual(
+            blocos["DESPESAS"]["total"],
+            cobertura["saidas"]["total"] + cobertura["compras_cartao"]["total"],
+        )
+        self.assertEqual(blocos["DESPESAS"]["total"], Decimal("625.00"))
+
+        receita = blocos["RECEITAS"]["categorias"][0]
+        self.assertEqual(receita["nome"], "Receitas do trabalho")
+        self.assertEqual(receita["subcategorias"][0]["nome"], "Direto na categoria")
+
+        categorias_despesa = {item["nome"]: item for item in blocos["DESPESAS"]["categorias"]}
+        casa = categorias_despesa["Casa"]
+        self.assertEqual(casa["valor"], Decimal("500.00"))
+        mercado = casa["subcategorias"][0]
+        self.assertEqual(mercado["nome"], "Mercado")
+        self.assertEqual(mercado["valor"], Decimal("500.00"))
+        self.assertEqual(
+            [item["descricao"] for item in mercado["lancamentos"]],
+            ["Mercado na conta", "Compra no cartão"],
+        )
+        self.assertFalse(mercado["lancamentos"][0]["compra_cartao"])
+        self.assertTrue(mercado["lancamentos"][1]["compra_cartao"])
+
+        consultiva = categorias_despesa["Consultiva"]["subcategorias"][0]
+        self.assertEqual(consultiva["nome"], "Direto na categoria")
+        self.assertTrue(consultiva["nao_computa_resultado"])
+        self.assertEqual(categorias_despesa["A classificar"]["valor"], Decimal("50.00"))
+        self.assertEqual(
+            categorias_despesa["A classificar"]["subcategorias"][0]["nome"],
+            "A classificar",
+        )
+
+    def test_composicao_distribui_rateio_e_preserva_ordenacao_por_data_e_evento(self):
+        categoria_casa = Categoria.objects.create(
+            usuario=self.usuario,
+            nome="Casa rateada",
+            natureza=Categoria.Natureza.PESSOAL,
+        )
+        categoria_energia = Categoria.objects.create(
+            usuario=self.usuario,
+            nome="Energia",
+            categoria_pai=categoria_casa,
+            natureza=Categoria.Natureza.PESSOAL,
+        )
+        categoria_agua = Categoria.objects.create(
+            usuario=self.usuario,
+            nome="Água",
+            categoria_pai=categoria_casa,
+            natureza=Categoria.Natureza.PESSOAL,
+        )
+        movimento = self.movimento(
+            "-1000.00",
+            date(2026, 10, 10),
+            descricao="Despesa rateada",
+        )
+        RateioCategoria.objects.create(
+            evento=movimento.evento,
+            categoria=categoria_energia,
+            valor=Decimal("600.00"),
+        )
+        RateioCategoria.objects.create(
+            evento=movimento.evento,
+            categoria=categoria_agua,
+            valor=Decimal("400.00"),
+        )
+        self.movimento(
+            "-50.00",
+            date(2026, 10, 8),
+            categoria=categoria_energia,
+            descricao="Primeiro por data",
+        )
+        self.movimento(
+            "-25.00",
+            date(2026, 10, 10),
+            categoria=categoria_energia,
+            descricao="Último pelo ID",
+        )
+
+        cobertura = consultar_dashboard(self.usuario, periodo="2026-10")["cobertura_credito"]
+        despesas = next(
+            bloco for bloco in cobertura["composicao_categorias"] if bloco["codigo"] == "DESPESAS"
+        )
+        casa = next(item for item in despesas["categorias"] if item["nome"] == "Casa rateada")
+        subcategorias = {item["nome"]: item for item in casa["subcategorias"]}
+
+        self.assertEqual(subcategorias["Energia"]["valor"], Decimal("675.00"))
+        self.assertEqual(subcategorias["Água"]["valor"], Decimal("400.00"))
+        self.assertEqual(
+            [item["descricao"] for item in subcategorias["Energia"]["lancamentos"]],
+            ["Primeiro por data", "Despesa rateada", "Último pelo ID"],
+        )
+        self.assertEqual(
+            sum((item["valor"] for item in casa["subcategorias"]), Decimal("0.00")),
+            casa["valor"],
+        )
+
     def test_dashboard_renderiza_painel_recolhido_tooltip_e_detalhamento(self):
         self.movimento("1000.00", date(2026, 10, 1), categoria=self.categoria_pessoal)
         self.compra("200.00", date(2026, 10, 6), categoria=self.categoria_pessoal)
@@ -398,10 +617,26 @@ class CoberturaCreditoTests(TestCase):
         )
         self.assertEqual(detalhe.status_code, 200)
         self.assertContains(detalhe, "Composição e evolução diária")
+        self.assertContains(detalhe, "Composição por categoria")
+        self.assertContains(
+            detalhe,
+            '<details class="coverage-detail-section coverage-detail-accordion coverage-category-section" open',
+        )
+        self.assertNotContains(
+            detalhe,
+            '<details class="coverage-detail-section coverage-detail-accordion" open',
+        )
+        self.assertContains(detalhe, 'id="coverageCategoryBlockRECEITAS"')
+        self.assertContains(detalhe, 'id="coverageCategoryBlockDESPESAS"')
         self.assertContains(detalhe, "Saídas e obrigações da conta")
         self.assertContains(detalhe, "Compras no cartão pela data da compra")
         self.assertContains(detalhe, "Evolução diária contrafactual")
         self.assertContains(detalhe, "Compra no cartão")
+        self.assertContains(
+            detalhe,
+            '<span class="coverage-origin-badge is-card">Compra no cartão</span>',
+        )
+        self.assertContains(detalhe, "Cartão principal")
 
     def test_detalhamento_exige_autenticacao_e_isola_usuario(self):
         self.compra("200.00", date(2026, 10, 6), categoria=self.categoria_pessoal)
