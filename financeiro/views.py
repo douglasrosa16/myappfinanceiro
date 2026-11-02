@@ -8,7 +8,8 @@ from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
-from django.views.decorators.http import require_GET, require_POST
+from django.views.decorators.cache import never_cache
+from django.views.decorators.http import require_GET, require_http_methods, require_POST
 from django.views.generic import CreateView, ListView, UpdateView
 from decimal import Decimal
 from urllib.parse import urlencode
@@ -37,8 +38,9 @@ from .forms import (
     RegraCategoriaCondicaoFormSet,
     RegraCategoriaForm,
     SugestaoRegraLancamentoForm,
+    TokenAcessoApiForm,
 )
-from .models import Ambito, Cartao, Categoria, Conta, EventoFinanceiro, Fatura, Importacao, ItemImportacao, Liquidacao, NaturezaEvento, Orcamento, ParcelaCartao, Pessoa, RegraCategoria, RegraCategoriaCondicao, Situacao, Titulo, VinculoTituloImportacao
+from .models import Ambito, Cartao, Categoria, Conta, EventoFinanceiro, Fatura, Importacao, ItemImportacao, Liquidacao, NaturezaEvento, NotificacaoCentral, Orcamento, ParcelaCartao, Pessoa, RegraCategoria, RegraCategoriaCondicao, Situacao, Titulo, TokenAcessoApi, VinculoTituloImportacao
 from .ofx import OFXError, OFXParser
 from .services.cartoes_faturas import (
     aviso_ciclo_cartao,
@@ -106,6 +108,7 @@ from .services.fechamento_faturas import (
     criar_transporte,
     reabrir_fatura,
 )
+from .services.tokens_api import criar_token_acesso
 
 
 class UsuarioMixin(LoginRequiredMixin):
@@ -115,6 +118,144 @@ class UsuarioMixin(LoginRequiredMixin):
     def form_valid(self, form):
         form.instance.usuario = self.request.user
         return super().form_valid(form)
+
+
+def _total_notificacoes_nao_lidas(usuario):
+    return NotificacaoCentral.objects.filter(
+        usuario=usuario,
+        lida_em__isnull=True,
+        arquivada_em__isnull=True,
+    ).count()
+
+
+def _notificacao_json(notificacao):
+    return {
+        "id": notificacao.pk,
+        "tipo": notificacao.tipo,
+        "titulo": notificacao.titulo,
+        "mensagem": notificacao.mensagem,
+        "dataReferencia": notificacao.data_referencia.isoformat(),
+        "criadaEm": timezone.localtime(notificacao.criado_em).isoformat(),
+        "atualizadaEm": timezone.localtime(notificacao.atualizado_em).isoformat(),
+        "lida": notificacao.lida_em is not None,
+        "arquivada": notificacao.arquivada_em is not None,
+        "conteudo": notificacao.conteudo,
+        "urls": {
+            "ler": reverse("notificacao_marcar_lida", args=[notificacao.pk]),
+            "arquivar": reverse("notificacao_arquivar", args=[notificacao.pk]),
+            "restaurar": reverse("notificacao_restaurar", args=[notificacao.pk]),
+        },
+    }
+
+
+@login_required
+@never_cache
+@require_GET
+def notificacoes_central(request):
+    filtro = request.GET.get("filtro", "nao_lidas")
+    if filtro not in {"nao_lidas", "todas", "arquivadas"}:
+        return JsonResponse({"ok": False, "erro": "Filtro invalido."}, status=400)
+    try:
+        pagina = max(int(request.GET.get("pagina", "1")), 1)
+    except (TypeError, ValueError):
+        return JsonResponse({"ok": False, "erro": "Pagina invalida."}, status=400)
+
+    notificacoes = NotificacaoCentral.objects.filter(usuario=request.user)
+    if filtro == "nao_lidas":
+        notificacoes = notificacoes.filter(lida_em__isnull=True, arquivada_em__isnull=True)
+    elif filtro == "todas":
+        notificacoes = notificacoes.filter(arquivada_em__isnull=True)
+    else:
+        notificacoes = notificacoes.filter(arquivada_em__isnull=False)
+
+    tamanho_pagina = 20
+    inicio = (pagina - 1) * tamanho_pagina
+    itens = list(notificacoes[inicio : inicio + tamanho_pagina + 1])
+    return JsonResponse(
+        {
+            "ok": True,
+            "filtro": filtro,
+            "naoLidas": _total_notificacoes_nao_lidas(request.user),
+            "notificacoes": [_notificacao_json(item) for item in itens[:tamanho_pagina]],
+            "pagina": pagina,
+            "temMais": len(itens) > tamanho_pagina,
+        }
+    )
+
+
+@login_required
+@require_POST
+def notificacao_marcar_lida(request, pk):
+    notificacao = get_object_or_404(NotificacaoCentral, pk=pk, usuario=request.user)
+    if notificacao.lida_em is None:
+        notificacao.lida_em = timezone.now()
+        notificacao.save(update_fields=["lida_em", "atualizado_em"])
+    return JsonResponse({"ok": True, "naoLidas": _total_notificacoes_nao_lidas(request.user)})
+
+
+@login_required
+@require_POST
+def notificacao_arquivar(request, pk):
+    notificacao = get_object_or_404(NotificacaoCentral, pk=pk, usuario=request.user)
+    agora = timezone.now()
+    notificacao.lida_em = notificacao.lida_em or agora
+    notificacao.arquivada_em = agora
+    notificacao.arquivada_automaticamente = False
+    notificacao.save(
+        update_fields=["lida_em", "arquivada_em", "arquivada_automaticamente", "atualizado_em"]
+    )
+    return JsonResponse({"ok": True, "naoLidas": _total_notificacoes_nao_lidas(request.user)})
+
+
+@login_required
+@require_POST
+def notificacao_restaurar(request, pk):
+    notificacao = get_object_or_404(NotificacaoCentral, pk=pk, usuario=request.user)
+    notificacao.arquivada_em = None
+    notificacao.arquivada_automaticamente = False
+    notificacao.save(update_fields=["arquivada_em", "arquivada_automaticamente", "atualizado_em"])
+    return JsonResponse({"ok": True, "naoLidas": _total_notificacoes_nao_lidas(request.user)})
+
+
+@login_required
+@require_POST
+def notificacoes_marcar_todas_lidas(request):
+    atualizadas = NotificacaoCentral.objects.filter(
+        usuario=request.user,
+        lida_em__isnull=True,
+        arquivada_em__isnull=True,
+    ).update(lida_em=timezone.now(), atualizado_em=timezone.now())
+    return JsonResponse({"ok": True, "atualizadas": atualizadas, "naoLidas": 0})
+
+
+@login_required
+@never_cache
+@require_http_methods(["GET", "POST"])
+def integracoes(request):
+    token_exibido = ""
+    form = TokenAcessoApiForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        _, token_exibido = criar_token_acesso(request.user, form.cleaned_data["nome"])
+        form = TokenAcessoApiForm()
+        messages.success(request, "Token criado. Copie o segredo agora; ele não será exibido novamente.")
+    tokens = TokenAcessoApi.objects.filter(usuario=request.user)
+    return render(
+        request,
+        "financeiro/integracoes.html",
+        {"form": form, "tokens": tokens, "token_exibido": token_exibido},
+    )
+
+
+@login_required
+@require_POST
+def token_api_revogar(request, pk):
+    token = get_object_or_404(TokenAcessoApi, pk=pk, usuario=request.user)
+    if token.ativo:
+        token.ativo = False
+        token.revogado_em = timezone.now()
+        token.save(update_fields=["ativo", "revogado_em", "atualizado_em"])
+        messages.success(request, f'Token "{token.nome}" revogado.')
+    return redirect("integracoes")
 
 
 @login_required
@@ -166,44 +307,58 @@ def dashboard_detalhamento(request):
     return render(request, "financeiro/_dashboard_detalhamento.html", contexto)
 
 
+FILTROS_RETORNO_EVENTOS = (
+    "date_from",
+    "date_to",
+    "q",
+    "origin",
+    "category",
+    "parent_category",
+    "nature",
+    "category_nature",
+    "essentiality",
+    "computes",
+    "person",
+    "status",
+    "analysis_type",
+    "analysis_value",
+    "analysis_nature",
+    "analysis_scope",
+    "group_card_invoices",
+    "card_purchase_date",
+    "dashboard_context",
+)
+
+
+def _adicionar_filtros_retorno(request, parametros, nomes):
+    for nome in nomes:
+        if nome in {"date_from", "date_to"}:
+            if nome in request.GET:
+                parametros[nome] = request.GET[nome]
+            continue
+        valor = request.GET.get(nome)
+        if valor not in (None, ""):
+            parametros[nome] = valor
+
+
 def _url_retorno_lancamento(request, periodo: str, destino_padrao="eventos"):
     destino = request.GET.get("return_to", destino_padrao)
     if destino not in {"dashboard", "eventos"}:
         destino = destino_padrao
-    parametros = {"period": periodo}
+    periodo_retorno = request.GET["period"] if "period" in request.GET else periodo
+    parametros = {"period": periodo_retorno}
     for origem, nome in (("account", "account"), ("card", "card")):
         valor = request.GET.get(origem)
         if valor and valor.isdigit():
             parametros[nome] = valor
     if destino == "dashboard":
-        for nome in ("date_from", "date_to", "origin", "nature"):
-            valor = request.GET.get(nome)
-            if valor not in (None, ""):
-                parametros[nome] = valor
+        _adicionar_filtros_retorno(
+            request,
+            parametros,
+            ("date_from", "date_to", "origin", "nature"),
+        )
     else:
-        for nome in (
-            "date_from",
-            "date_to",
-            "q",
-            "origin",
-            "category",
-            "parent_category",
-            "nature",
-            "category_nature",
-            "essentiality",
-            "computes",
-            "person",
-            "status",
-            "analysis_type",
-            "analysis_value",
-            "analysis_nature",
-            "analysis_scope",
-            "group_card_invoices",
-            "dashboard_context",
-        ):
-            valor = request.GET.get(nome)
-            if valor not in (None, ""):
-                parametros[nome] = valor
+        _adicionar_filtros_retorno(request, parametros, FILTROS_RETORNO_EVENTOS)
     return f"{reverse(destino)}?{urlencode(parametros)}"
 
 
@@ -232,6 +387,7 @@ def lancamentos(request):
             analysis_nature=request.GET.get("analysis_nature", "all"),
             analysis_scope=request.GET.get("analysis_scope", "all"),
             group_card_invoices=request.GET.get("group_card_invoices"),
+            card_purchase_date=request.GET.get("card_purchase_date"),
             dashboard_context=request.GET.get("dashboard_context") == "1",
         )
     except DetalhamentoDashboardInvalido as exc:
@@ -350,8 +506,7 @@ def lancamento_clonar(request, pk):
         valor = request.GET.get(nome)
         if valor and valor.isdigit():
             parametros[nome] = valor
-    if request.GET.get("group_card_invoices") == "1":
-        parametros["group_card_invoices"] = "1"
+    _adicionar_filtros_retorno(request, parametros, FILTROS_RETORNO_EVENTOS)
     return redirect(f"{reverse('evento_novo')}?{urlencode(parametros)}")
 
 

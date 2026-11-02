@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
-APP_VERSION = "2.10.25"
+APP_VERSION = "2026.10.26"
 
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-only-change-me")
 DEBUG = os.getenv("DJANGO_DEBUG", "False").lower() == "true"
@@ -94,3 +94,14 @@ MEDIA_ROOT = BASE_DIR / "media"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 LOGIN_REDIRECT_URL = "/"
 LOGOUT_REDIRECT_URL = "/accounts/login/"
+
+CENTRAL_NOTIFICACOES_HORARIO = os.getenv("CENTRAL_NOTIFICACOES_HORARIO", "06:00")
+CENTRAL_NOTIFICACOES_INTERVALO_VERIFICACAO = int(
+    os.getenv("CENTRAL_NOTIFICACOES_INTERVALO_VERIFICACAO", "60")
+)
+CENTRAL_NOTIFICACOES_INTERVALO_RETRY = int(
+    os.getenv("CENTRAL_NOTIFICACOES_INTERVALO_RETRY", "900")
+)
+CENTRAL_NOTIFICACOES_MAX_TENTATIVAS = int(
+    os.getenv("CENTRAL_NOTIFICACOES_MAX_TENTATIVAS", "3")
+)
