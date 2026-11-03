@@ -273,7 +273,7 @@ class ImportacaoServiceTests(TestCase):
         self.assertEqual(item.categoria_id, categoria_regra.pk)
         self.assertEqual(item.ambito, Ambito.PROFISSIONAL)
 
-    def test_regra_nova_e_aplicada_somente_depois_da_conciliacao(self):
+    def test_regra_nova_classifica_item_sem_sobrescrever_natureza_do_sinal(self):
         categoria = Categoria.objects.create(usuario=self.usuario, nome="Compras categorizadas")
         regra = RegraCategoria.objects.create(
             usuario=self.usuario,
@@ -298,12 +298,43 @@ class ImportacaoServiceTests(TestCase):
         self.assertEqual(item.acao, ItemImportacao.Acao.CRIAR)
         self.assertEqual(item.categoria, categoria)
         self.assertEqual(item.ambito, Ambito.PROFISSIONAL)
-        self.assertEqual(item.natureza, NaturezaEvento.RECEITA)
+        self.assertEqual(item.natureza, NaturezaEvento.DESPESA)
         self.assertIn("Mercado como receita", item.motivo_status)
 
         confirmar_importacao(lote.pk, self.usuario)
         item.refresh_from_db()
         self.assertIn("Mercado como receita", item.motivo_status)
+
+    def test_mesma_regra_preserva_despesa_e_receita_conforme_sinal_da_conta(self):
+        categoria = Categoria.objects.create(usuario=self.usuario, nome="Transferências classificadas")
+        regra = RegraCategoria.objects.create(
+            usuario=self.usuario,
+            nome="Transferência da mesma pessoa",
+            prioridade=1,
+            categoria=categoria,
+            natureza_sugerida=NaturezaEvento.DESPESA,
+        )
+        RegraCategoriaCondicao.objects.create(
+            regra=regra,
+            ordem=1,
+            campo=RegraCategoriaCondicao.Campo.DESCRICAO,
+            operador=RegraCategoriaCondicao.Operador.CONTEM,
+            valor="PESSOA TESTE",
+        )
+        ofx = (
+            OFX_CONTA.replace(b"<TRNTYPE>DEBIT", b"<TRNTYPE>CREDIT", 1)
+            .replace(b"Mercado Central", b"Pessoa Teste")
+            .replace(b"Cliente XPTO", b"Pessoa Teste")
+        )
+
+        lote = self.criar_lote(OFXParser.parse(ofx))
+        despesa = lote.itens.get(valor=Decimal("-125.50"))
+        receita = lote.itens.get(valor=Decimal("2500.00"))
+
+        self.assertEqual(despesa.natureza, NaturezaEvento.DESPESA)
+        self.assertEqual(receita.natureza, NaturezaEvento.RECEITA)
+        self.assertEqual(despesa.categoria, categoria)
+        self.assertEqual(receita.categoria, categoria)
 
     def test_regra_nova_nao_altera_item_pre_vinculado(self):
         documento = OFXParser.parse(OFX_CONTA)

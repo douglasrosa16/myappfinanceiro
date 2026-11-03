@@ -414,9 +414,15 @@ def natureza_sugerida(origem: str, tipo: str, valor: Decimal, descricao: str) ->
         if tipo in {"CREDIT", "CREDITO"} or valor > 0:
             return NaturezaEvento.ESTORNO
         return NaturezaEvento.DESPESA
-    if tipo in {"CREDIT", "DEP", "DIRECTDEP", "INT", "CREDITO"} or valor > 0:
+    if valor > ZERO:
         return NaturezaEvento.RECEITA
-    return NaturezaEvento.DESPESA
+    if valor < ZERO:
+        return NaturezaEvento.DESPESA
+    return (
+        NaturezaEvento.RECEITA
+        if tipo in {"CREDIT", "DEP", "DIRECTDEP", "INT", "CREDITO"}
+        else NaturezaEvento.DESPESA
+    )
 
 
 def criar_itens(importacao: Importacao, documento: OFXDocument) -> list[ItemImportacao]:
@@ -647,6 +653,8 @@ def aplicar_sugestao_classificacao(
     ):
         return
     protegidos = set(campos_protegidos or ())
+    if item.importacao.origem == Importacao.Origem.CONTA:
+        protegidos.add("natureza")
     if getattr(item, "_categoria_informada", False):
         protegidos.add("categoria")
     if getattr(item, "_pessoa_informada", False):
