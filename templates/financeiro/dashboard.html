@@ -4,9 +4,10 @@
 {% block content %}
 <style>
   .overview-page{max-width:1600px}.overview-page .top{margin-bottom:22px}.overview-period{display:flex;align-items:end;gap:12px}.overview-period label{display:grid;gap:5px;font-size:14px}.overview-period input{width:140px}.overview-date-control{width:140px}.overview-header-actions{display:flex;align-items:center;gap:4px;margin-bottom:1px}.overview-values-toggle{color:var(--muted)}.overview-notifications-toggle{position:relative;color:var(--muted)}.overview-notifications-badge{position:absolute;top:-7px;right:-8px;display:grid;place-items:center;min-width:18px;height:18px;padding:0 5px;border:2px solid #fff;border-radius:999px;background:var(--danger);color:#fff;font-size:10px;font-weight:750;line-height:1}.overview-notifications-badge[hidden]{display:none}
-  .overview-filters{background:#fff;border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:22px}.overview-filter-grid{display:grid;grid-template-columns:repeat(2,minmax(180px,1fr)) auto;gap:12px;align-items:end}.overview-filter-grid label,.analysis-filter label{display:grid;gap:5px;font-size:14px}.overview-filter-grid .secondary{justify-self:end}.overview-filter-note{font-size:14px;color:var(--muted);margin:10px 0 0}
-  .overview-heading{display:flex;justify-content:space-between;align-items:center;gap:16px;margin:0 0 18px}.overview-heading h2{margin:0}.overview-page .kpis{margin-bottom:22px}.overview-page .card .label{font-size:14px;color:var(--muted)}.overview-page .value{letter-spacing:-.7px}
-  .overview-grid{display:grid;grid-template-columns:1.2fr 1fr;gap:22px}.overview-grid.equal{grid-template-columns:1fr 1fr}.overview-grid.three{grid-template-columns:repeat(3,1fr)}.overview-section{margin-top:22px}.overview-section:first-of-type{margin-top:0}.overview-empty{color:var(--muted);font-size:14px;margin:10px 0}.overview-helper{font-size:14px;color:var(--muted);margin:15px 0 0}
+  .overview-filters{background:#fff;border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:22px}.overview-filter-grid{display:grid;grid-template-columns:repeat(3,minmax(180px,1fr)) auto;gap:12px;align-items:end}.overview-filter-grid label,.analysis-filter label{display:grid;gap:5px;font-size:14px}.overview-filter-grid .secondary{justify-self:end}.overview-filter-note{font-size:14px;color:var(--muted);margin:10px 0 0}
+  .overview-heading{display:flex;justify-content:space-between;align-items:center;gap:16px;margin:0 0 18px}.overview-heading h2{margin:0}.analysis-basis-badge{display:inline-flex;align-items:center;width:max-content;border-radius:999px;background:#edf2fa;color:var(--blue);padding:4px 9px;font-size:12px;font-weight:700;white-space:nowrap}.overview-page .kpis{margin-bottom:22px}.overview-page .card .label{font-size:14px;color:var(--muted)}.overview-page .value{letter-spacing:-.7px}
+  .overview-grid{display:grid;grid-template-columns:1.2fr 1fr;gap:22px}.overview-grid.equal{grid-template-columns:1fr 1fr}.overview-grid.three{grid-template-columns:repeat(3,1fr)}.overview-section{margin-top:22px}.overview-section:first-of-type{margin-top:0}.overview-section[data-dashboard-panel-id="evolution"]{margin-top:22px}.overview-empty{color:var(--muted);font-size:14px;margin:10px 0}.overview-helper{font-size:14px;color:var(--muted);margin:15px 0 0}
+  .overview-grid>.collapsible-panel{min-width:0}.collapsible-summary h2,.dashboard-panel-summary-title,.dashboard-panel-summary-heading{min-width:0}.collapsible-content-action{display:flex;justify-content:flex-end;margin-bottom:12px}.dashboard-panel-summary-title{display:grid;gap:3px}.dashboard-panel-summary-title .small{font-weight:400}.dashboard-panel-summary-heading{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
   .bar-list{display:grid;gap:14px}.bar-label{display:flex;justify-content:space-between;gap:14px;font-size:14px;margin-bottom:5px}.bar-label strong{white-space:nowrap}.bar-track{height:9px;background:#eef2f8;border-radius:10px;overflow:hidden}.bar-fill{width:0;height:100%;background:var(--danger);border-radius:10px;min-width:0}.bar-fill.green{background:var(--green)}.bar-fill.orange,.bar-fill.red{background:var(--danger)}.bar-meta{color:var(--muted);font-size:13px}
   .category-tabs{display:inline-flex;gap:4px;padding:4px;margin:-4px 0 18px;background:#eef2f8;border-radius:9px}.category-tab{border:0;background:transparent;color:var(--muted);border-radius:7px;padding:8px 12px;font:inherit;font-size:13px;font-weight:700;cursor:pointer}.category-tab[aria-selected="true"]{background:#fff;color:var(--blue);box-shadow:0 1px 3px #17233b1f}.category-tab:focus-visible{outline:2px solid var(--blue);outline-offset:2px}.category-tab-panel[hidden]{display:none}.category-computation-badge{display:inline-flex;align-items:center;border-radius:999px;background:#fff1d6;color:#8a5a00;padding:2px 7px;font-size:11px;font-weight:700;white-space:nowrap}
   .indicator-detail{display:block;color:inherit;text-decoration:none;border-radius:8px;padding:7px;margin:-7px;transition:background .18s ease,box-shadow .18s ease}.indicator-detail:hover,.indicator-detail:focus-visible{background:#f1f6fd;box-shadow:0 0 0 2px #2769d833;outline:0}.indicator-detail.is-disabled{cursor:default}.indicator-detail.is-disabled:hover{background:transparent;box-shadow:none}.indicator-detail-label{display:inline-flex;align-items:center;gap:7px}.indicator-detail-icon{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;color:var(--blue);flex:none}.indicator-detail-card{padding:10px;margin:-10px}.indicator-detail-card .value{margin-top:5px}.metric-list-item.indicator-detail{padding:11px 7px;margin:0 -7px}.metric-list-item.indicator-detail:last-child{border-bottom:0}
@@ -14,9 +15,13 @@
   .simulator{background:#f1f7ff;padding:18px;border-radius:9px}.simulator h3{font-size:17px;margin:0 0 7px}.simulator-list{display:grid;gap:12px;margin-top:16px}.simulator-item{background:#fff;border:1px solid #dbe8f8;border-radius:8px;padding:12px}.simulator-item-head{display:flex;justify-content:space-between;gap:12px}.simulator-control{display:grid;grid-template-columns:1fr auto;align-items:center;gap:10px;margin-top:8px}.simulator-control input{padding:0;border:0;background:transparent;accent-color:#1477ed}.simulator-rate{font-weight:700;white-space:nowrap}.simulator-totals{border-top:1px solid #c9dcef;margin-top:15px;padding-top:12px;display:grid;gap:5px}.simulator-total-row{display:flex;justify-content:space-between;gap:12px}
   .forecast-list{display:grid}.forecast-item{padding:13px 0;border-bottom:1px solid var(--line)}.forecast-item:first-child{padding-top:5px}.forecast-item h3{font-size:16px;margin:0}.forecast-projection{background:#fff5e1;padding:14px;border-radius:8px;font-size:14px;margin-top:16px}.commitment-cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:16px}.commitment-card{background:#f7f9fc;border:1px solid var(--line);border-radius:8px;padding:13px;min-width:0}.commitment-card .value{font-size:21px;margin:4px 0}.commitment-card .small{font-size:13px}
   .attention-list{display:grid;gap:10px}.attention-item{border-left:3px solid #d38a14;background:#fff8ea;padding:12px 14px;border-radius:3px}.attention-item h3{font-size:15px;margin:0 0 4px}.attention-item p{margin:0;font-size:14px}.attention-item strong{display:block;margin-top:5px}
-  .evolution-table{display:grid;gap:12px}.evolution-row{display:grid;grid-template-columns:65px 1fr;gap:12px;align-items:center}.evolution-month{font-size:13px;color:var(--muted)}.evolution-bars{display:grid;gap:4px}.evolution-bar{width:0;height:7px;border-radius:8px;min-width:2px}.evolution-bar.revenue{background:var(--green)}.evolution-bar.expense{background:var(--danger)}.evolution-bar.result{background:#d38a14}.evolution-legend{display:flex;gap:16px;flex-wrap:wrap;color:var(--muted);font-size:13px;margin-top:16px}.evolution-legend span{display:inline-flex;align-items:center;gap:5px}.legend-dot{width:9px;height:9px;border-radius:50%}.legend-dot.revenue{background:var(--green)}.legend-dot.expense{background:var(--danger)}.legend-dot.result{background:#d38a14}
+  .evolution-table{display:grid;gap:12px}.evolution-row{display:grid;grid-template-columns:65px 1fr;gap:12px;align-items:center}.evolution-month{font-size:13px;color:var(--muted)}.evolution-bars{display:grid;gap:4px}.evolution-bar{width:0;height:7px;border-radius:8px;min-width:2px}.evolution-bar.revenue{background:var(--green)}.evolution-bar.expense{background:var(--danger)}.evolution-bar.result{background:#d38a14}.evolution-legend{display:flex;gap:16px;flex-wrap:wrap;color:var(--muted);font-size:13px;margin-top:16px}.evolution-legend span{display:inline-flex;align-items:center;gap:5px}.legend-dot{width:9px;height:9px;border-radius:50%}.legend-dot.revenue{background:var(--green)}.legend-dot.expense{background:var(--danger)}.legend-dot.result{background:#d38a14}.overview-section.monthly-category-panel{margin-top:22px}.monthly-category-summary-title{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.monthly-category-table-wrap{overflow-x:auto}.monthly-category-table-wrap:focus-visible{outline:3px solid #60a5fa;outline-offset:3px}.monthly-category-table{width:100%;min-width:900px;border-collapse:collapse}.monthly-category-table th,.monthly-category-table td{padding:11px 12px;border-bottom:1px solid var(--line);text-align:right;vertical-align:middle;white-space:nowrap}.monthly-category-table th:first-child,.monthly-category-table td:first-child{text-align:left;white-space:normal;min-width:210px}.monthly-category-table thead th{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.02em}.monthly-category-table tbody th{font-weight:600}.monthly-category-table tfoot th,.monthly-category-table tfoot td{font-weight:700;background:#f8fafc}.monthly-category-table tfoot tr:last-child th,.monthly-category-table tfoot tr:last-child td{border-bottom:0}.monthly-category-toggle{display:inline-flex;align-items:center;gap:8px;width:auto;max-width:100%;padding:4px 5px;margin:-4px -5px;border:0;border-radius:7px;background:transparent;color:inherit;font:inherit;font-weight:600;text-align:left;cursor:pointer}.monthly-category-toggle:hover,.monthly-category-toggle:focus-visible{background:#edf2fa;outline:2px solid #2769d866;outline-offset:1px}.monthly-category-chevron{width:16px;height:16px;fill:none;stroke:var(--blue);stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none;transition:transform .18s ease}.monthly-category-toggle[aria-expanded="true"] .monthly-category-chevron{transform:rotate(90deg)}.monthly-category-subcategories[hidden]{display:none}.monthly-category-subcategory th,.monthly-category-subcategory td{background:#f8fafc}.monthly-category-subcategory th{padding-left:42px;font-weight:400!important;color:var(--ink)}.monthly-category-subcategory-label{display:inline-flex;align-items:center;gap:7px}.monthly-category-subcategory-label::before{content:"";width:10px;height:1px;background:#b7c7dc;flex:none}.monthly-category-link{display:block;margin:-7px -9px;padding:7px 9px;border-radius:7px;color:inherit;text-decoration:none}.monthly-category-link:hover,.monthly-category-link:focus-visible{background:#edf2fa;outline:2px solid #2769d833;outline-offset:-2px}.monthly-category-empty{color:var(--muted)}
+  .monthly-category-summary-title{width:100%;margin:0}.monthly-category-value-cell{padding:0!important}.monthly-category-value-cell .monthly-category-link{margin:0;padding:11px 12px;border-radius:0}.monthly-category-value-cell .monthly-category-empty{display:block;padding:11px 12px}@media (prefers-reduced-motion:reduce){.monthly-category-chevron{transition:none}}
+  .monthly-category-intro{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:16px}.monthly-category-intro p{margin:0}.monthly-category-scroll-hint{display:none;color:var(--muted);font-size:12px}.monthly-category-insights{margin:0 0 20px;padding:16px;border:1px solid #dbe6f3;border-radius:10px;background:#f8fbff}.monthly-category-insights-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:13px}.monthly-category-insights-head h3{font-size:17px;margin:0 0 3px}.monthly-category-insights-head p{margin:0;color:var(--muted);font-size:13px}.monthly-category-insights-period{white-space:nowrap;color:var(--muted);font-size:12px;font-weight:700}.monthly-category-insight-overview{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.monthly-category-insight-card{display:grid;gap:5px;padding:13px 14px;border:1px solid #dbe6f3;border-radius:9px;background:#fff;min-width:0}.monthly-category-insight-card.is-consultive{border-color:var(--line);background:#f7f9fc}.monthly-category-insight-label{color:var(--muted);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.02em}.monthly-category-insight-card>strong{font-size:21px;font-variant-numeric:tabular-nums}.monthly-category-insight-card small{color:var(--muted);font-size:12px}.monthly-category-insight-variation{width:max-content;max-width:100%}.monthly-category-rankings{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:12px}.monthly-category-ranking{padding:13px 14px;border:1px solid var(--line);border-radius:9px;background:#fff;min-width:0}.monthly-category-ranking h4{display:flex;align-items:center;gap:7px;font-size:14px;margin:0 0 9px}.monthly-category-ranking h4 svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}.monthly-category-ranking.is-increase h4{color:var(--danger)}.monthly-category-ranking.is-reduction h4{color:var(--green)}.monthly-category-ranking-list{display:grid;gap:8px;margin:0;padding:0;list-style:none}.monthly-category-ranking-item{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px 12px;align-items:center;padding-top:8px;border-top:1px solid #edf1f6}.monthly-category-ranking-item:first-child{padding-top:0;border-top:0}.monthly-category-ranking-name{min-width:0;overflow-wrap:anywhere;font-size:13px;font-weight:700}.monthly-category-ranking-current{white-space:nowrap;font-size:13px;font-weight:700;font-variant-numeric:tabular-nums}.monthly-category-ranking-change{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:10px;color:var(--muted);font-size:12px}.monthly-category-ranking-empty{margin:0;color:var(--muted);font-size:13px}.monthly-category-legend{display:flex;align-items:flex-start;gap:12px;margin:14px 0;color:var(--muted);font-size:12px}.monthly-category-legend>strong{color:var(--ink);font-size:12px}.monthly-category-legend-list{display:flex;align-items:center;gap:8px 14px;flex-wrap:wrap;margin:0;padding:0;list-style:none}.monthly-category-legend-item{display:inline-flex;align-items:center;gap:5px}.monthly-category-legend-arrow{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}.monthly-category-legend-item.is-increase{color:var(--danger)}.monthly-category-legend-item.is-reduction{color:var(--green)}.monthly-category-legend-item.is-stable,.monthly-category-legend-item.is-neutral{color:var(--muted)}.monthly-category-legend-item.is-reduction .monthly-category-legend-arrow{transform:rotate(180deg)}.monthly-category-legend-item.is-stable .monthly-category-legend-arrow{transform:rotate(90deg)}.monthly-category-table-wrap{position:relative;border:1px solid var(--line);border-radius:9px;overscroll-behavior-inline:contain;scrollbar-gutter:stable}.monthly-category-table{min-width:1640px;font-variant-numeric:tabular-nums}.monthly-category-table th:first-child,.monthly-category-table td:first-child{min-width:230px}.monthly-category-table th:first-child{position:sticky;left:0;z-index:2;background:#fff;box-shadow:1px 0 0 var(--line)}.monthly-category-table thead th{background:#fff}.monthly-category-table thead th:first-child{z-index:4;background:#f8fafc}.monthly-category-table thead th.is-latest{background:#edf5ff;color:var(--blue)}.monthly-category-table tbody td.is-latest{background:#f7fbff}.monthly-category-table tbody tr.monthly-category-consultive-row th,.monthly-category-table tbody tr.monthly-category-consultive-row td{color:var(--muted)}.monthly-category-table tbody tr.monthly-category-consultive-row th:first-child,.monthly-category-table tbody tr.monthly-category-consultive-row td{background:#f7f9fc}.monthly-category-table .monthly-category-subcategory th:first-child{background:#f8fafc}.monthly-category-table .category-computation-badge{background:#f1f3f6;color:var(--muted)}.monthly-category-link{display:flex;min-height:54px;flex-direction:column;align-items:flex-end;justify-content:center;gap:4px}.monthly-category-link.is-consultive{color:var(--muted)}.monthly-category-amount{font-weight:650}.monthly-category-variation{display:inline-flex;align-items:center;gap:4px;width:max-content;max-width:100%;border-radius:999px;padding:2px 6px;background:#f1f3f6;color:var(--muted);font-size:11px;font-weight:700;line-height:1.25;white-space:nowrap}.monthly-category-variation-icon{width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;flex:none}.monthly-category-variation.direction-alta{background:#fff0f2;color:var(--danger)}.monthly-category-variation.direction-baixa{background:#e6f6f0;color:var(--green)}.monthly-category-variation.direction-baixa .monthly-category-variation-icon{transform:rotate(180deg)}.monthly-category-variation.direction-estavel .monthly-category-variation-icon{transform:rotate(90deg)}.monthly-category-consultive-row .monthly-category-variation,.monthly-category-insight-card.is-consultive .monthly-category-variation,.monthly-category-variation.is-consultive{background:#edf1f6;color:var(--muted)}.monthly-category-value-cell .monthly-category-empty{display:flex;min-height:54px;flex-direction:column;align-items:flex-end;justify-content:center;gap:4px}.monthly-category-total-cell{font-weight:700}.monthly-category-total-value{display:grid;justify-items:end;gap:4px}.monthly-category-table tfoot th:first-child{z-index:3}.monthly-category-total-label,.monthly-category-row-label{display:grid;gap:2px}.monthly-category-total-label small,.monthly-category-row-label small{color:var(--muted);font-size:11px;font-weight:500;text-transform:none;letter-spacing:0}.monthly-category-total-computable th,.monthly-category-total-computable td{background:#edf5ff!important;color:var(--ink)}.monthly-category-total-computable th:first-child{background:#edf5ff!important}.monthly-category-total-consultive th,.monthly-category-total-consultive td{background:#f7f9fc!important;color:var(--muted)}.monthly-category-total-consultive th:first-child{background:#f7f9fc!important}.monthly-category-total-analyzed th,.monthly-category-total-analyzed td{background:#fff!important;border-top:2px solid #dbe6f3}.monthly-category-total-analyzed th:first-child{background:#fff!important}.monthly-category-visually-hidden{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
+  .monthly-category-panel .monthly-category-table,.monthly-category-panel .monthly-category-table *,.monthly-category-panel .monthly-category-insights,.monthly-category-panel .monthly-category-insights *,.monthly-category-panel .monthly-category-legend,.monthly-category-panel .monthly-category-legend *{font-weight:400}.monthly-category-variation.state-sem_movimento{display:none}.monthly-category-variation.state-sem_base{display:none}
+  .monthly-category-table{min-width:1400px;table-layout:fixed}.monthly-category-table th:first-child,.monthly-category-table td:first-child{width:190px;min-width:190px;max-width:190px}.monthly-category-table th:not(:first-child):not(:last-child){width:92px}.monthly-category-table th:last-child{width:110px}.monthly-category-table th:not(:first-child),.monthly-category-table td:not(:first-child){padding-left:6px;padding-right:6px}.monthly-category-amount,.monthly-category-total-value>strong,.monthly-category-total-cell{font-size:12px}
   .cash-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.cash-item{padding:15px;background:#f7f9fc;border-radius:8px}.cash-item .value{font-size:23px}.onboarding{margin-top:22px}.onboarding .daily-actions{display:grid;gap:16px}.daily-action{border-left:3px solid #35b99a;padding-left:14px}.daily-action h3{font-size:16px;margin:0 0 7px}.daily-action p{margin:0}.overview-footer{font-size:14px;color:var(--muted);margin-top:28px}
-  .cash-budget-grid{align-items:start}.budget-panel{display:grid;grid-template-rows:auto minmax(0,1fr);overflow:hidden;min-height:0}.budget-panel h2,.budget-panel h2 *,.budget-item,.budget-item *{font-weight:400}.budget-content{display:grid;grid-template-rows:minmax(0,1fr) auto;min-height:0}.budget-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-content:start;gap:11px 20px;min-height:0;overflow-y:auto;overflow-x:hidden;scrollbar-gutter:stable;padding-right:5px}.budget-item{padding:7px;margin:0;min-width:0}.budget-item-head{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;margin-bottom:4px;font-size:14px}.budget-item-budget{color:var(--muted);font-size:12px;white-space:nowrap;text-align:right}.budget-expense-row{display:grid;grid-template-columns:auto minmax(40px,1fr) auto;gap:9px;align-items:center;font-size:12px}.budget-expense-row>span:first-child{color:var(--muted)}.budget-expense-values{color:var(--muted);white-space:nowrap;text-align:right}.budget-bar-track{height:7px;background:#eef2f8;border-radius:8px;overflow:hidden}.budget-bar-fill{display:block;width:0;height:100%;border-radius:8px}.budget-bar-fill.blue{background:var(--blue)}.budget-bar-fill.orange{background:#d97706}.budget-bar-fill.red{background:var(--danger)}.budget-bar-fill.neutral{background:var(--line)}.overview-section.simulator-panel{margin-top:22px}
+  .cash-budget-grid{align-items:start}.budget-panel{display:grid;grid-template-rows:auto minmax(0,1fr);overflow:hidden;min-height:0}.budget-item,.budget-item *{font-weight:400}.budget-content{display:grid;grid-template-rows:minmax(0,1fr) auto;min-height:0}.budget-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-content:start;gap:11px 20px;min-height:0;overflow-y:auto;overflow-x:hidden;scrollbar-gutter:stable;padding-right:5px}.budget-item{padding:7px;margin:0;min-width:0}.budget-item-head{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;margin-bottom:4px;font-size:14px}.budget-item-budget{color:var(--muted);font-size:12px;white-space:nowrap;text-align:right}.budget-expense-row{display:grid;grid-template-columns:auto minmax(40px,1fr) auto;gap:9px;align-items:center;font-size:12px}.budget-expense-row>span:first-child{color:var(--muted)}.budget-expense-values{color:var(--muted);white-space:nowrap;text-align:right}.budget-bar-track{height:7px;background:#eef2f8;border-radius:8px;overflow:hidden}.budget-bar-fill{display:block;width:0;height:100%;border-radius:8px}.budget-bar-fill.blue{background:var(--blue)}.budget-bar-fill.orange{background:#d97706}.budget-bar-fill.red{background:var(--danger)}.budget-bar-fill.neutral{background:var(--line)}.overview-section.simulator-panel{margin-top:22px}
   .overview-section.comparison-panel{margin-top:28px}.comparison-panel-summary .comparison-heading{flex:1;margin:0}.comparison-heading{align-items:flex-start}.comparison-heading p{margin:5px 0 0}.comparison-section+.comparison-section{margin-top:24px}.comparison-section h3{font-size:16px;margin:0 0 10px}.comparison-columns,.comparison-row{display:grid;grid-template-columns:minmax(180px,1fr) repeat(2,minmax(120px,.32fr)) minmax(105px,.25fr);gap:14px;align-items:center}.comparison-columns{padding:0 14px 7px;color:var(--muted);font-size:12px;font-weight:700}.comparison-columns span:not(:first-child),.comparison-value{text-align:right}.comparison-list{display:grid;gap:8px}.comparison-group{border:1px solid var(--line);border-radius:9px;background:#fff;overflow:hidden}.comparison-summary{cursor:pointer;list-style:none;padding:13px 14px}.comparison-summary::-webkit-details-marker{display:none}.comparison-category{display:flex;align-items:center;gap:8px;min-width:0;font-weight:400}.comparison-category svg{width:16px;height:16px;fill:none;stroke:var(--blue);stroke-width:2;transition:transform .18s ease;flex:none}.comparison-group[open]>.comparison-summary .comparison-category svg{transform:rotate(90deg)}.comparison-value{white-space:nowrap}.comparison-percentage{font-weight:400}.comparison-percentage.is-blue{color:var(--blue)}.comparison-percentage.is-orange{color:#d97706}.comparison-percentage.is-red{color:var(--danger)}.comparison-state{display:inline-flex;justify-content:center;min-width:72px;border-radius:999px;padding:3px 8px;background:#edf2fa;color:var(--blue);font-size:12px}.comparison-state.is-unavailable{background:#f1f3f6;color:var(--muted)}.comparison-children{border-top:1px solid var(--line);background:#f8fafc;padding:3px 14px}.comparison-child{padding:10px 0;border-bottom:1px solid #e8edf4;font-size:14px}.comparison-child:last-child{border-bottom:0}.comparison-child .comparison-category{padding-left:24px;font-weight:400}.comparison-static{padding:13px 14px}.comparison-empty{padding:14px;border:1px dashed var(--line);border-radius:8px;color:var(--muted);font-size:14px}
   .coverage-panel{margin-top:28px}.coverage-panel .collapsible-summary{position:relative}.coverage-summary-title{display:flex;align-items:center;gap:8px;min-width:0}.coverage-summary-title h2{min-width:0}.coverage-summary-meta{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:14px;font-weight:600}.coverage-help{display:inline-flex;flex:0 0 auto}.coverage-help-button{display:grid;place-items:center;width:22px;height:22px;padding:0;border:1px solid #b7c7dc;border-radius:50%;background:#fff;color:var(--blue);font-size:13px;font-weight:800;line-height:1;cursor:help}.coverage-help-button:hover,.coverage-help-button:focus-visible{background:#edf2fa;border-color:var(--blue);outline:2px solid #2769d833;outline-offset:2px}.coverage-tooltip{position:fixed;z-index:80;width:min(360px,calc(100vw - 32px));max-height:min(320px,calc(100vh - 32px));overflow:auto;padding:12px 14px;border:1px solid #b7c7dc;border-radius:9px;background:#17233b;color:#fff;box-shadow:0 12px 30px #17233b40;font-size:13px;font-weight:500;line-height:1.45;cursor:default}.coverage-tooltip[hidden]{display:none}.coverage-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.coverage-metric{padding:14px;border:1px solid var(--line);border-radius:9px;background:#f7f9fc;min-width:0}.coverage-metric .small{display:block}.coverage-metric .value{font-size:22px;margin:5px 0}.coverage-status{display:inline-flex;margin-top:5px;border-radius:999px;padding:3px 8px;background:#edf2fa;color:var(--blue);font-size:12px;font-weight:700}.coverage-status.is-warning{background:#fff1d6;color:#8a5a00}.coverage-status.is-danger{background:#ffe7e7;color:var(--danger)}.coverage-dependency{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:14px}.coverage-dependency>div{padding:12px 14px;border-left:3px solid #d38a14;background:#fff8ea;border-radius:4px}.coverage-dependency strong{display:block;margin-top:4px}.coverage-actions{display:flex;justify-content:flex-end;margin-top:16px}.coverage-detail-totals,.coverage-detail-results{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:18px}.coverage-detail-totals>div,.coverage-detail-results>div{display:grid;gap:4px;padding:12px;border:1px solid var(--line);border-radius:8px;background:#f7f9fc}.coverage-detail-results{grid-template-columns:repeat(2,minmax(0,1fr))}.coverage-detail-results strong,.coverage-detail-totals strong{font-size:18px}.coverage-detail-results small{color:var(--muted)}.coverage-detail-section{margin-top:24px}.coverage-detail-section h4{font-size:17px;margin:0 0 9px}.coverage-detail-section>p{margin:-3px 0 10px}.coverage-detail-table-wrap{overflow-x:auto}.coverage-detail-table{width:100%;min-width:760px;border-collapse:collapse}.coverage-detail-table th,.coverage-detail-table td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}.coverage-detail-table th{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.02em}.coverage-detail-table .money{text-align:right;white-space:nowrap}.coverage-detail-table td small{display:block;margin-top:3px;color:var(--muted)}.coverage-detail-table .empty{padding:22px;text-align:center;color:var(--muted)}.coverage-estimated{display:inline-flex;margin-left:7px;border-radius:999px;padding:2px 7px;background:#fff1d6;color:#8a5a00;font-size:11px;font-weight:700}.coverage-daily-table{min-width:900px}
   .dashboard-detail-dialog{max-width:1240px;width:calc(100% - 32px);padding:0;overflow:hidden}.dashboard-detail-dialog .dialog-head{padding:20px 24px;margin:0;border-bottom:1px solid var(--line)}.dashboard-detail-body{padding:22px 24px;max-height:calc(90vh - 78px);overflow:auto}.dashboard-detail-loading{display:flex;align-items:center;justify-content:center;gap:12px;min-height:180px;color:var(--muted)}.dashboard-detail-summary{display:flex;justify-content:space-between;align-items:start;gap:20px;margin-bottom:18px}.dashboard-detail-summary h3{font-size:22px;margin:4px 0}.dashboard-detail-summary p{margin:0}.dashboard-detail-total{text-align:right;display:grid;gap:4px}.dashboard-detail-total strong{font-size:22px;white-space:nowrap}.dashboard-detail-actions{display:flex;justify-content:flex-end;margin-top:20px}.dashboard-detail-dialog .transactions-count{margin:0 0 10px}.dashboard-detail-dialog .transactions-table-wrap{overflow-x:auto}.dashboard-detail-dialog .transactions-table{min-width:850px}.dashboard-detail-dialog .transactions-table td:first-child,.dashboard-detail-dialog .transactions-table .money{white-space:nowrap}.dashboard-detail-dialog .transactions-table .description{min-width:250px;max-width:430px;overflow-wrap:anywhere}.dashboard-detail-dialog .transactions-table .source-name,.dashboard-detail-dialog .transactions-table .category-cell{min-width:170px}.dashboard-detail-dialog .transactions-table .pill{display:inline-block;margin-top:5px;background:#edf2fa;color:var(--blue)}.dashboard-detail-dialog .transactions-table .transaction-main-row.has-observation td{border-bottom:0;padding-bottom:5px}.dashboard-detail-dialog .transactions-table .transaction-observation-row td{padding-top:0}.dashboard-detail-dialog .transactions-table .transaction-observation{color:var(--muted);font-size:14px;white-space:pre-wrap;overflow-wrap:anywhere}.dashboard-detail-dialog .transactions-table .transaction-observation strong{color:var(--ink)}.dashboard-detail-dialog .transactions-table .empty{padding:28px;text-align:center;color:var(--muted)}.dashboard-detail-error{min-height:180px;display:grid;place-items:center;text-align:center}.dashboard-detail-error p{color:var(--muted)}
@@ -26,10 +31,17 @@
   @media(max-width:700px){.overview-period{width:100%;display:grid;grid-template-columns:1fr 1fr}.overview-period input,.overview-date-control{width:100%}.overview-header-actions{grid-column:1/-1;justify-self:end}.overview-filter-grid{grid-template-columns:1fr}.overview-filter-grid .secondary{grid-column:auto;width:100%;text-align:center}.overview-heading{align-items:stretch;flex-direction:column}.overview-heading .button{justify-content:center}.overview-page .kpis{gap:10px}.overview-page .card,.overview-page .panel{padding:16px}.overview-page .collapsible-panel{padding:0}.overview-page .value{font-size:23px}.bar-label{font-size:13px}.commitment-cards,.cash-grid,.budget-list{grid-template-columns:1fr}.coverage-grid,.coverage-detail-totals,.coverage-detail-results,.coverage-dependency{grid-template-columns:1fr}.evolution-row{grid-template-columns:45px 1fr}.comparison-columns{display:none}.comparison-row{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px 10px}.comparison-category{grid-column:1/-1}.comparison-value{font-size:13px}.comparison-value::before{content:attr(data-label);display:block;margin-bottom:2px;color:var(--muted);font-size:10px;font-weight:600}.comparison-child .comparison-category{padding-left:14px}.comparison-tabs{display:flex;width:100%}.comparison-tabs .category-tab{flex:1;white-space:normal;line-height:1.25}.coverage-panel .collapsible-summary{align-items:flex-start;flex-wrap:wrap}.coverage-summary-title{flex:1 1 calc(100% - 42px)}.coverage-summary-meta{order:3;flex:1 0 100%;padding-left:0}.coverage-panel .collapsible-toggle{order:2}.dashboard-detail-dialog{width:calc(100% - 16px)}.dashboard-detail-dialog .dialog-head,.dashboard-detail-body{padding:16px}.dashboard-detail-summary{display:grid}.dashboard-detail-total{text-align:left}.notification-center-dialog{width:100%;border-radius:0}.notification-center-toolbar{align-items:stretch;flex-direction:column}.notification-tabs{justify-content:space-between}.notification-totals{grid-template-columns:1fr}}
   .coverage-detail-accordion{border:1px solid var(--line);border-radius:10px;background:#fff;overflow:hidden}.coverage-detail-section-summary{display:flex;align-items:center;gap:12px;padding:14px 16px;cursor:pointer;list-style:none}.coverage-detail-section-summary::-webkit-details-marker,.coverage-category-summary::-webkit-details-marker,.coverage-subcategory-summary::-webkit-details-marker{display:none}.coverage-detail-section-summary:focus-visible,.coverage-category-summary:focus-visible,.coverage-subcategory-summary:focus-visible{outline:3px solid #60a5fa;outline-offset:-3px}.coverage-detail-section-summary h4{margin:0}.coverage-detail-section-summary>div:first-child small{display:block;margin-top:3px;color:var(--muted)}.coverage-detail-section-meta{display:inline-flex;align-items:center;gap:5px;margin-left:auto;color:var(--muted);font-size:13px}.coverage-section-toggle{display:grid;place-items:center;width:28px;height:28px;color:var(--blue);flex:0 0 auto}.coverage-section-toggle svg,.coverage-category-name>svg,.coverage-subcategory-name>svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;transition:transform .18s ease}.coverage-detail-accordion[open]>.coverage-detail-section-summary .coverage-section-toggle svg,.coverage-category-group[open]>.coverage-category-summary .coverage-category-name>svg,.coverage-subcategory-group[open]>.coverage-subcategory-summary .coverage-subcategory-name>svg{transform:rotate(90deg)}.coverage-detail-section-content{padding:0 16px 16px;border-top:1px solid var(--line)}.coverage-detail-section-content>p{margin:13px 0}.coverage-category-section{border-color:#b7c7dc}.coverage-category-blocks{display:grid;gap:18px}.coverage-category-block{padding:15px;border:1px solid var(--line);border-radius:9px;background:#f8fafc}.coverage-category-block-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:12px}.coverage-category-block-head h5{font-size:16px;margin:0 0 3px}.coverage-category-block-head small{color:var(--muted)}.coverage-category-list{display:grid;gap:9px}.coverage-category-group{border:1px solid var(--line);border-radius:8px;background:#fff;overflow:hidden}.coverage-category-summary{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px;align-items:center;padding:12px 14px;cursor:pointer;list-style:none}.coverage-category-name,.coverage-subcategory-name{display:flex;align-items:center;gap:8px;min-width:0}.coverage-category-name>svg,.coverage-subcategory-name>svg{color:var(--blue);flex:0 0 auto}.coverage-category-name small,.coverage-category-values small{display:block;margin-top:2px;color:var(--muted);font-size:11px}.coverage-category-values{text-align:right;white-space:nowrap}.coverage-category-progress{height:4px;margin:0 14px 9px;background:#eef2f8;border-radius:7px;overflow:hidden}.coverage-category-progress span{display:block;height:100%;background:var(--blue);border-radius:7px}.coverage-subcategory-list{display:grid;gap:8px;padding:10px 12px 12px;border-top:1px solid var(--line);background:#f8fafc}.coverage-subcategory-group{border:1px solid #dfe6ef;border-radius:7px;background:#fff;overflow:hidden}.coverage-subcategory-summary{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;padding:10px 12px;cursor:pointer;list-style:none}.coverage-subcategory-summary>span:last-child{display:flex;align-items:center;gap:12px;text-align:right;white-space:nowrap}.coverage-subcategory-summary>span:last-child small{color:var(--muted)}.coverage-computation-badge{display:inline-flex!important;width:max-content;margin-top:4px!important;border-radius:999px;padding:2px 7px;background:#f1f3f6;color:var(--muted)!important;font-size:10px!important;font-weight:700}.coverage-category-launches{border-top:1px solid var(--line)}.coverage-category-launches .coverage-detail-table{min-width:760px}.coverage-origin-badge{display:inline-flex;border-radius:999px;padding:2px 7px;background:#edf2fa;color:var(--blue);font-size:11px;font-weight:700}.coverage-origin-badge.is-card{background:#fff1d6;color:#8a5a00}.coverage-category-empty{margin:0;padding:14px;border:1px dashed var(--line);border-radius:7px;color:var(--muted);font-size:13px}
   @media(max-width:700px){.coverage-detail-section-summary{align-items:flex-start;flex-wrap:wrap}.coverage-detail-section-meta{order:3;flex:1 0 100%;margin-left:0}.coverage-section-toggle{margin-left:auto}.coverage-category-block{padding:12px}.coverage-category-summary,.coverage-subcategory-summary{grid-template-columns:1fr}.coverage-category-values{text-align:left;padding-left:25px}.coverage-subcategory-summary>span:last-child{justify-content:space-between;padding-left:25px;text-align:left}.coverage-category-block-head{align-items:flex-end}}
+  @media(max-width:1100px){.monthly-category-rankings{grid-template-columns:1fr}.monthly-category-table{min-width:1580px}}
+  @media(max-width:700px){.monthly-category-summary-title{align-items:flex-start;font-size:19px}.monthly-category-summary-title .analysis-basis-badge{order:3}.monthly-category-insights{padding:13px}.monthly-category-insights-head{display:grid;gap:5px}.monthly-category-insights-period{white-space:normal}.monthly-category-insight-overview{grid-template-columns:1fr}.monthly-category-intro{display:grid;gap:6px}.monthly-category-scroll-hint{display:block}.monthly-category-legend{display:grid;gap:7px}.monthly-category-table{min-width:1510px}.monthly-category-table th:first-child,.monthly-category-table td:first-child{min-width:190px;max-width:190px}.monthly-category-subcategory th{padding-left:30px}.monthly-category-ranking-change{align-items:flex-start;flex-direction:column;gap:4px}}
+  @media(max-width:1100px){.monthly-category-table{min-width:1350px}.monthly-category-table th:not(:first-child):not(:last-child){width:88px}.monthly-category-table th:last-child{width:105px}}
+  @media(max-width:700px){.monthly-category-table{min-width:1280px}.monthly-category-table th:first-child,.monthly-category-table td:first-child{width:170px;min-width:170px;max-width:170px}.monthly-category-table th:not(:first-child):not(:last-child){width:84px}.monthly-category-table th:last-child{width:100px}}
 </style>
 
 <div class="overview-page">
-  <form id="overviewFilters" method="get"></form>
+  <form id="overviewFilters" method="get">
+    <input type="hidden" name="origin" value="{{ origem_filtro }}">
+    <input type="hidden" name="nature" value="{{ natureza_filtro }}">
+  </form>
   <header class="top">
     <div><div class="eyebrow">Finanças pessoais e profissionais</div><h1>Visão geral</h1></div>
     <div class="overview-period" aria-label="Período do dashboard">
@@ -71,14 +83,17 @@
       <label for="cardFilter">Cartão de crédito
         <select id="cardFilter" name="card" form="overviewFilters"><option value="all">Todos os cartões</option>{% for cartao in cartoes_compativeis %}<option value="{{ cartao.pk }}"{% if cartao_selecionado.pk == cartao.pk %} selected{% endif %}>{{ cartao.nome }}{% if not cartao.ativo %} (inativo){% endif %}</option>{% endfor %}</select>
       </label>
+      <label for="analysisBasisFilter">Base da análise
+        <select id="analysisBasisFilter" name="analysis_basis" form="overviewFilters">{% for valor, rotulo in analysis_bases %}<option value="{{ valor }}"{% if valor == analysis_basis %} selected{% endif %}>{{ rotulo }}</option>{% endfor %}</select>
+      </label>
       <a class="secondary" href="?">Limpar filtros</a>
     </div>
-    <p class="overview-filter-note">Conta filtra caixa e cartões vinculados. Cartão filtra a fatura e a análise do cartão. Os demais filtros analíticos aparecem na seção de gastos.</p>
+    <p class="overview-filter-note">Conta filtra caixa e cartões vinculados. A base altera somente os indicadores analíticos: por competência, o cartão acompanha as parcelas; por data da compra, reconhece o valor integral no mês da compra. Fluxo de caixa, compromissos, cobertura e orçamento mantêm suas próprias regras.</p>
   </section>
 
   <div class="overview-heading">
-    <h2>Resumo do período</h2>
-    <a class="button" href="{% url 'evento_novo' %}?return_to=dashboard&amp;period={{ periodo_referencia }}&amp;date_from={{ data_inicial|date:'d/m/Y'|urlencode }}&amp;date_to={{ data_final|date:'d/m/Y'|urlencode }}&amp;origin={{ origem_filtro }}&amp;nature={{ natureza_filtro }}{% if conta_selecionada %}&amp;account={{ conta_selecionada.pk }}{% endif %}{% if cartao_selecionado %}&amp;card={{ cartao_selecionado.pk }}{% endif %}" data-modal-url="{% url 'evento_novo' %}?return_to=dashboard&amp;period={{ periodo_referencia }}&amp;date_from={{ data_inicial|date:'d/m/Y'|urlencode }}&amp;date_to={{ data_final|date:'d/m/Y'|urlencode }}&amp;origin={{ origem_filtro }}&amp;nature={{ natureza_filtro }}{% if conta_selecionada %}&amp;account={{ conta_selecionada.pk }}{% endif %}{% if cartao_selecionado %}&amp;card={{ cartao_selecionado.pk }}{% endif %}" data-modal-title="Novo lançamento">Novo lançamento</a>
+    <div><h2>Resumo do período</h2><span class="analysis-basis-badge">{% if analysis_basis == 'purchase' %}Data da compra · valor integral{% else %}Competência financeira · parcelas mensais{% endif %}</span></div>
+    <a class="button" href="{% url 'evento_novo' %}?return_to=dashboard&amp;period={{ periodo_referencia }}&amp;date_from={{ data_inicial|date:'d/m/Y'|urlencode }}&amp;date_to={{ data_final|date:'d/m/Y'|urlencode }}&amp;origin={{ origem_filtro }}&amp;nature={{ natureza_filtro }}&amp;analysis_basis={{ analysis_basis }}{% if conta_selecionada %}&amp;account={{ conta_selecionada.pk }}{% endif %}{% if cartao_selecionado %}&amp;card={{ cartao_selecionado.pk }}{% endif %}" data-modal-url="{% url 'evento_novo' %}?return_to=dashboard&amp;period={{ periodo_referencia }}&amp;date_from={{ data_inicial|date:'d/m/Y'|urlencode }}&amp;date_to={{ data_final|date:'d/m/Y'|urlencode }}&amp;origin={{ origem_filtro }}&amp;nature={{ natureza_filtro }}&amp;analysis_basis={{ analysis_basis }}{% if conta_selecionada %}&amp;account={{ conta_selecionada.pk }}{% endif %}{% if cartao_selecionado %}&amp;card={{ cartao_selecionado.pk }}{% endif %}" data-modal-title="Novo lançamento">Novo lançamento</a>
   </div>
 
   <section class="kpis" aria-label="Indicadores financeiros do período">
@@ -89,17 +104,28 @@
   </section>
 
   <section class="overview-grid equal overview-section" aria-label="Posição financeira atual">
-    <article class="panel">
-      <div class="overview-heading position-panel-head"><div><h2>Contas financeiras</h2><p class="small">Posição atual em {{ posicao_data|date:"d/m/Y" }}</p></div><a class="link-button" href="{% url 'contas' %}">Ver contas</a></div>
+    <details class="panel collapsible-panel" open aria-labelledby="accountsTitle" data-dashboard-panel-id="accounts">
+      <summary class="collapsible-summary" title="Abrir ou fechar contas financeiras">
+        <span class="dashboard-panel-summary-title"><h2 id="accountsTitle">Contas financeiras</h2><span class="small">Posição atual em {{ posicao_data|date:"d/m/Y" }}</span></span>
+        <span class="collapsible-toggle" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>
+      </summary>
+      <div class="collapsible-content">
+      <div class="collapsible-content-action"><a class="link-button" href="{% url 'contas' %}">Ver contas</a></div>
       {% if contas_financeiras %}<div class="position-list">{% for item in contas_financeiras %}
         <article class="position-item"><div class="row"><h3>{{ item.conta.nome }}</h3><span class="source">{{ item.conta.get_tipo_display }}</span></div>{% if item.identificacao %}<div class="source">{{ item.identificacao }}</div>{% endif %}
           <div class="position-values"><div class="position-value"><span>Saldo atual</span><strong class="{{ item.saldo_atual|classe_valor }}">{{ item.saldo_atual|brl_sinal }}</strong></div><div class="position-value"><span>Saldo projetado</span><strong class="{{ item.saldo_projetado|classe_valor }}">{{ item.saldo_projetado|brl_sinal }}</strong></div></div>
         </article>
       {% endfor %}</div><p class="overview-helper">Considera previsões pendentes até a data final selecionada.</p>{% else %}<p class="overview-empty">Nenhuma conta financeira disponível neste filtro.</p>{% endif %}
-    </article>
+      </div>
+    </details>
 
-    <article class="panel">
-      <div class="overview-heading position-panel-head"><div><h2>Limite dos cartões</h2><p class="small">Limite disponível calculado com base nos registros cadastrados.</p></div><a class="link-button" href="{% url 'cartoes_faturas' %}">Ver cartões</a></div>
+    <details class="panel collapsible-panel" open aria-labelledby="cardsTitle" data-dashboard-panel-id="cards">
+      <summary class="collapsible-summary" title="Abrir ou fechar limite dos cartões">
+        <span class="dashboard-panel-summary-title"><h2 id="cardsTitle">Limite dos cartões</h2><span class="small">Limite disponível calculado com base nos registros cadastrados.</span></span>
+        <span class="collapsible-toggle" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>
+      </summary>
+      <div class="collapsible-content">
+      <div class="collapsible-content-action"><a class="link-button" href="{% url 'cartoes_faturas' %}">Ver cartões</a></div>
       {% if limites_cartoes %}{% for item in limites_cartoes %}
         <article class="credit-card-item"><div class="credit-card-head"><div><h3>{{ item.cartao.nome }}</h3>{% if item.cartao.emissor or item.cartao.final %}<div class="source">{{ item.cartao.emissor }}{% if item.cartao.emissor and item.cartao.final %} · {% endif %}{% if item.cartao.final %}Final {{ item.cartao.final }}{% endif %}</div>{% endif %}</div></div>
           {% if item.limite_informado %}
@@ -111,12 +137,51 @@
           {% if item.inclui_estimativas %}<p class="limit-note">Inclui parcelas futuras estimadas.</p>{% endif %}{% if item.transportes_pendentes %}<p class="limit-alert">{{ item.transportes_pendentes }} saldo(s) transportado(s) aguardando conferência.</p>{% endif %}
         </article>
       {% endfor %}{% else %}<p class="overview-empty">Nenhum cartão disponível neste filtro.</p>{% endif %}
-    </article>
+      </div>
+    </details>
+  </section>
+
+  <section class="overview-grid equal overview-section cash-budget-grid" aria-label="Fluxo de caixa e orçamento">
+    <details class="panel collapsible-panel" open aria-labelledby="cashFlowTitle" data-cash-flow-panel data-dashboard-panel-id="cash-flow">
+      <summary class="collapsible-summary" title="Abrir ou fechar fluxo de caixa">
+        <h2 id="cashFlowTitle">Fluxo de caixa</h2>
+        <span class="collapsible-toggle" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>
+      </summary>
+      <div class="collapsible-content">
+        <div class="cash-grid"><div class="cash-item"><div class="small">Entradas na conta</div><div class="value {{ fluxo_caixa.entradas|classe_valor }}">{{ fluxo_caixa.entradas|brl }}</div></div><div class="cash-item"><div class="small">Saídas da conta</div><div class="value {{ fluxo_caixa.saidas|classe_valor:'saida' }}">{{ fluxo_caixa.saidas|brl }}</div></div><div class="cash-item"><div class="small">Saldo próprio</div><div class="value {{ fluxo_caixa.saldo|classe_valor }}">{{ fluxo_caixa.saldo|brl_sinal }}</div></div><div class="cash-item"><div class="small">Receitas previstas</div><div class="value {{ fluxo_caixa.receitas_previstas|classe_valor }}">{{ fluxo_caixa.receitas_previstas|brl }}</div></div><div class="cash-item"><div class="small">Saídas previstas</div><div class="value {{ fluxo_caixa.saidas_previstas|classe_valor:'saida' }}">{{ fluxo_caixa.saidas_previstas|brl }}</div></div><div class="cash-item"><div class="small">Saldo projetado</div><div class="value {{ fluxo_caixa.saldo_projetado|classe_valor }}">{{ fluxo_caixa.saldo_projetado|brl_sinal }}</div></div></div>
+        <p class="overview-helper">Entradas e saídas mostram movimentos realizados, pagamentos de fatura e transferências. Receitas e saídas previstas consideram títulos em aberto no período; o saldo projetado combina o saldo atual com essas previsões.</p>
+      </div>
+    </details>
+    <details class="panel collapsible-panel budget-panel" open aria-labelledby="budgetTitle" data-budget-overview-panel data-dashboard-panel-id="budget">
+      <summary class="collapsible-summary" title="Abrir ou fechar orçamento">
+        <h2 id="budgetTitle">Orçamento <span class="collapsible-summary-meta">Total · <span>{{ orcamento_dashboard.total_orcado|brl }}</span> · {{ orcamento_dashboard.mes_rotulo }}</span></h2>
+        <span class="collapsible-toggle" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>
+      </summary>
+      <div class="collapsible-content budget-content">
+        {% if orcamento_dashboard.categorias %}
+          <div class="budget-list" tabindex="0" aria-label="Categorias do orçamento">
+            {% for categoria in orcamento_dashboard.categorias %}
+              {% if categoria.realizado %}<a class="budget-item indicator-detail" href="{{ categoria.lancamentos_url }}" data-dashboard-detail-url="{{ categoria.detalhe_url }}" aria-label="Ver lançamentos que compõem o orçamento de {{ categoria.nome }}">{% else %}<div class="budget-item indicator-detail is-disabled" aria-disabled="true">{% endif %}
+                <div class="budget-item-head" aria-label="Orçamento de {{ categoria.nome }}: {{ categoria.orcado|brl }}; {% if categoria.participacao is None %}participação indisponível no orçamento total{% else %}{{ categoria.participacao|floatformat:2 }}% do orçamento total{% endif %}"><span class="indicator-detail-label">{{ categoria.nome }}{% if categoria.realizado %}<svg class="indicator-detail-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>{% endif %}</span><span class="budget-item-budget">{{ categoria.orcado|brl }} · {% if categoria.participacao is None %}—{% else %}{{ categoria.participacao|floatformat:2 }}%{% endif %}</span></div>
+                <div class="budget-expense-row"><span>Despesas</span><div class="budget-bar-track" role="progressbar" aria-label="{% if categoria.percentual_comprometido is None %}Comprometimento indisponível para {{ categoria.nome }}{% else %}{{ categoria.percentual_comprometido|floatformat:2 }}% comprometido em {{ categoria.nome }}{% endif %}"{% if categoria.percentual_comprometido is not None %} aria-valuemin="0" aria-valuemax="{{ categoria.percentual_comprometido_aria_max }}" aria-valuenow="{{ categoria.percentual_comprometido }}" aria-valuetext="{{ categoria.realizado|brl_sinal }} de {{ categoria.orcado|brl }}"{% endif %}><span class="budget-bar-fill {{ categoria.faixa_percentual }}" style="width:{{ categoria.percentual_comprometido_css }}%"></span></div><span class="budget-expense-values"><span class="{{ categoria.realizado|classe_valor:'saida' }}">{{ categoria.realizado|brl_sinal }}</span> · {% if categoria.percentual_comprometido is None %}<span>—</span>{% else %}<span>{{ categoria.percentual_comprometido|floatformat:2 }}%</span>{% endif %}</span></div>
+              {% if categoria.realizado %}</a>{% else %}</div>{% endif %}
+            {% endfor %}
+          </div>
+        {% else %}
+          <p class="overview-empty">Nenhum orçamento cadastrado para {{ orcamento_dashboard.mes_rotulo }}.</p>
+        {% endif %}
+        <p class="overview-helper">O orçamento acompanha lançamentos da conta e parcelas mensais do cartão no mês completo, independentemente da base analítica e dos filtros financeiros acima.</p>
+      </div>
+    </details>
   </section>
 
   <section class="overview-grid overview-section" aria-label="Análise dos gastos">
-    <article class="panel">
-      <h2>Composição das despesas <span class="collapsible-summary-meta">Total · <span class="{{ total_composicao_despesas|classe_valor:'saida' }}">{{ total_composicao_despesas|brl }}</span></span></h2>
+    <details class="panel collapsible-panel" open aria-labelledby="expenseCompositionTitle" data-dashboard-panel-id="expense-composition">
+      <summary class="collapsible-summary" title="Abrir ou fechar composição das despesas">
+        <h2 id="expenseCompositionTitle">Composição das despesas <span class="collapsible-summary-meta">Total · <span class="{{ total_composicao_despesas|classe_valor:'saida' }}">{{ total_composicao_despesas|brl }}</span></span></h2>
+        <span class="collapsible-toggle" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>
+      </summary>
+      <div class="collapsible-content">
       <div class="bar-list">
         {% for item in composicao_despesas %}
           {% if item.valor %}<a class="indicator-detail" href="{% url 'eventos' %}?{{ lancamentos_base_query }}&amp;analysis_type=essentiality&amp;analysis_value={{ item.tipo|urlencode }}&amp;essentiality={{ item.tipo|urlencode }}&amp;computes=COMPUTA" data-dashboard-detail-url="{% url 'dashboard_detalhamento' %}?{{ detalhe_base_query }}&amp;type=essentiality&amp;value={{ item.tipo|urlencode }}" aria-label="Ver lançamentos que compõem {{ item.nome }}">{% else %}<div class="indicator-detail is-disabled" aria-disabled="true">{% endif %}
@@ -125,21 +190,31 @@
         {% endfor %}
       </div>
       <p class="overview-helper">Valores computáveis agrupados pela classificação de essencialidade.</p>
-    </article>
-    <article class="panel">
-      <h2>Gastos controláveis</h2>
+      </div>
+    </details>
+    <details class="panel collapsible-panel" open aria-labelledby="controllableExpensesTitle" data-dashboard-panel-id="controllable-expenses">
+      <summary class="collapsible-summary" title="Abrir ou fechar gastos controláveis">
+        <h2 id="controllableExpensesTitle">Gastos controláveis</h2>
+        <span class="collapsible-toggle" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>
+      </summary>
+      <div class="collapsible-content">
       {% if gastos_controlaveis.valor %}<a class="indicator-detail indicator-detail-card" href="{% url 'eventos' %}?{{ lancamentos_base_query }}&amp;analysis_type=controllable&amp;analysis_value=&amp;computes=COMPUTA" data-dashboard-detail-url="{% url 'dashboard_detalhamento' %}?{{ detalhe_base_query }}&amp;type=controllable" aria-label="Ver lançamentos que compõem os gastos controláveis">{% else %}<div class="indicator-detail indicator-detail-card is-disabled" aria-disabled="true">{% endif %}
         <div class="indicator-detail-label"><div class="value {{ gastos_controlaveis.valor|classe_valor:'saida' }}">{{ gastos_controlaveis.valor|brl }}</div>{% if gastos_controlaveis.valor %}<svg class="indicator-detail-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>{% endif %}</div>
         <p class="small">{{ gastos_controlaveis.percentual|floatformat:2 }}% das despesas totais</p>
         <div class="bar-track"><div class="bar-fill" style="width:{{ gastos_controlaveis.percentual_css }}%"></div></div>
         <p class="overview-helper">Estilo de vida e supérfluos. Este valor representa economia possível.</p>
       {% if gastos_controlaveis.valor %}</a>{% else %}</div>{% endif %}
-    </article>
+      </div>
+    </details>
   </section>
 
   <section class="overview-grid overview-section" aria-label="Gastos por categoria e distribuição por natureza">
-    <article class="panel" aria-labelledby="categoryTitle" data-category-tabs>
-      <div class="overview-heading"><h2 id="categoryTitle">Gastos por categoria <span class="collapsible-summary-meta">Total · <span class="{{ total_gastos_por_categoria|classe_valor:'saida' }}" data-category-total="COMPUTA">{{ total_gastos_por_categoria|brl }}</span><span class="{{ total_gastos_por_categoria_nao_computa|classe_valor:'saida' }}" data-category-total="NAO_COMPUTA" hidden>{{ total_gastos_por_categoria_nao_computa|brl }}</span></span></h2><span class="small">Conta + cartão, sem duplicar pagamento de fatura</span></div>
+    <details class="panel collapsible-panel" open aria-labelledby="categoryTitle" data-category-tabs data-dashboard-panel-id="expenses-by-category">
+      <summary class="collapsible-summary" title="Abrir ou fechar gastos por categoria">
+        <span class="dashboard-panel-summary-title"><h2 id="categoryTitle">Gastos por categoria <span class="collapsible-summary-meta">Total · <span class="{{ total_gastos_por_categoria|classe_valor:'saida' }}" data-category-total="COMPUTA">{{ total_gastos_por_categoria|brl }}</span><span class="{{ total_gastos_por_categoria_nao_computa|classe_valor:'saida' }}" data-category-total="NAO_COMPUTA" hidden>{{ total_gastos_por_categoria_nao_computa|brl }}</span></span></h2><span class="small">Conta + cartão, sem duplicar pagamento de fatura</span></span>
+        <span class="collapsible-toggle" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>
+      </summary>
+      <div class="collapsible-content">
       <!-- <div class="analysis-filter" aria-label="Filtros da análise de gastos">
         <label for="originFilter">Origem<select id="originFilter" name="origin" form="overviewFilters">{% for valor, rotulo in origens_analiticas %}<option value="{{ valor }}"{% if valor == origem_filtro %} selected{% endif %}>{{ rotulo }}</option>{% endfor %}</select></label>
         <label for="natureFilter">Natureza<select id="natureFilter" name="nature" form="overviewFilters">{% for valor, rotulo in naturezas_analiticas %}<option value="{{ valor }}"{% if valor == natureza_filtro %} selected{% endif %}>{{ rotulo }}</option>{% endfor %}</select></label>
@@ -163,9 +238,14 @@
         {% endfor %}</div>{% else %}<p class="overview-empty">Nenhum gasto não computável neste filtro.</p>{% endif %}
       </div>
       <p class="overview-helper">Subcategorias são agrupadas pela categoria superior. A aba não computável é apenas consultiva e não altera o resultado.</p>
-    </article>
-    <article class="panel">
-      <h2>Distribuição por natureza <span class="collapsible-summary-meta">Total · <span class="{{ total_distribuicao_natureza|classe_valor:'saida' }}">{{ total_distribuicao_natureza|brl }}</span></span></h2>
+      </div>
+    </details>
+    <details class="panel collapsible-panel" open aria-labelledby="natureDistributionTitle" data-dashboard-panel-id="nature-distribution">
+      <summary class="collapsible-summary" title="Abrir ou fechar distribuição por natureza">
+        <h2 id="natureDistributionTitle">Distribuição por natureza <span class="collapsible-summary-meta">Total · <span class="{{ total_distribuicao_natureza|classe_valor:'saida' }}">{{ total_distribuicao_natureza|brl }}</span></span></h2>
+        <span class="collapsible-toggle" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>
+      </summary>
+      <div class="collapsible-content">
       <div class="metric-list">
         {% for item in distribuicao_natureza %}
           {% if item.valor %}<a class="metric-list-item indicator-detail" href="{% url 'eventos' %}?{{ lancamentos_base_query }}&amp;analysis_type=category_nature&amp;analysis_value={{ item.tipo|urlencode }}&amp;category_nature={{ item.tipo|urlencode }}&amp;computes=COMPUTA" data-dashboard-detail-url="{% url 'dashboard_detalhamento' %}?{{ detalhe_base_query }}&amp;type=category_nature&amp;value={{ item.tipo|urlencode }}" aria-label="Ver lançamentos de natureza {{ item.nome }}">{% else %}<div class="metric-list-item indicator-detail is-disabled" aria-disabled="true">{% endif %}
@@ -173,57 +253,263 @@
           {% if item.valor %}</a>{% else %}</div>{% endif %}
         {% endfor %}
       </div>
-    </article>
+      </div>
+    </details>
   </section>
 
   <section class="overview-grid overview-section" aria-label="Compromissos e pontos de atenção">
-    <article class="panel">
-      <h2>Próximos compromissos</h2>
+    <details class="panel collapsible-panel" open aria-labelledby="commitmentsTitle" data-dashboard-panel-id="commitments">
+      <summary class="collapsible-summary" title="Abrir ou fechar próximos compromissos">
+        <h2 id="commitmentsTitle">Próximos compromissos</h2>
+        <span class="collapsible-toggle" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>
+      </summary>
+      <div class="collapsible-content">
       <div class="commitment-cards"><div class="commitment-card"><div class="small">Próximos 7 dias</div><div class="value {{ compromissos.total_7_dias|classe_valor:'saida' }}">{{ compromissos.total_7_dias|brl }}</div></div><div class="commitment-card"><div class="small">Próximos 30 dias</div><div class="value {{ compromissos.total_30_dias|classe_valor:'saida' }}">{{ compromissos.total_30_dias|brl }}</div></div><div class="commitment-card"><div class="small">Fatura confirmada</div><div class="value {{ compromissos.fatura_confirmada|classe_valor:'saida' }}">{{ compromissos.fatura_confirmada|brl_sinal }}</div></div><div class="commitment-card"><div class="small">Fatura projetada</div><div class="value {{ compromissos.fatura_projetada|classe_valor:'saida' }}">{{ compromissos.fatura_projetada|brl_sinal }}</div></div></div>
       {% if compromissos.proximos_30_dias %}<div class="forecast-list">{% for item in compromissos.proximos_30_dias|slice:":8" %}<article class="forecast-item"><div class="row"><h3>{{ item.descricao }}</h3><strong class="{{ item.saldo_aberto|classe_valor:'saida' }}">{{ item.saldo_aberto|brl }}</strong></div><div class="small">{{ item.vencimento|date:"d/m/Y" }} · {{ item.conta.nome }}</div></article>{% endfor %}</div>{% else %}<p class="overview-empty">Nenhum compromisso previsto nos próximos 30 dias.</p>{% endif %}
-    </article>
-    <article class="panel">
-      <h2>Pontos de atenção</h2>
-      {% if pontos_atencao %}<div class="attention-list">{% for item in pontos_atencao %}<div class="attention-item"><h3>{{ item.titulo }}</h3><p>{{ item.mensagem }}</p>{% if item.tipo == "orcamento" %}<strong><span class="{{ item.realizado|classe_valor:'saida' }}">{{ item.realizado|brl_sinal }}</span> de <span>{{ item.orcado|brl }}</span></strong>{% else %}<strong class="{{ item.valor|classe_valor:'saida' }}">{{ item.valor|brl }}</strong>{% endif %}</div>{% endfor %}</div>{% else %}<p class="overview-empty">Nenhum ponto de atenção objetivo neste período.</p>{% endif %}
-    </article>
-  </section>
-
-  <section class="panel overview-section" aria-labelledby="evolutionTitle">
-    <h2 id="evolutionTitle">Evolução financeira</h2>
-    {% if evolucao %}<div class="evolution-table">{% for item in evolucao %}<div class="evolution-row"><span class="evolution-month">{{ item.rotulo }}</span><div class="evolution-bars"><div class="evolution-bar revenue" style="width:{{ item.receitas_percentual_css }}%" title="Receitas: {{ item.receitas|brl }}"></div><div class="evolution-bar expense" style="width:{{ item.despesas_percentual_css }}%" title="Despesas: {{ item.despesas|brl }}"></div><div class="evolution-bar result" style="width:{{ item.resultado_percentual_css }}%" title="Resultado: {{ item.resultado|brl_sinal }}"></div></div></div>{% endfor %}</div><div class="evolution-legend"><span><i class="legend-dot revenue"></i>Receitas</span><span><i class="legend-dot expense"></i>Despesas</span><span><i class="legend-dot result"></i>Resultado</span></div>{% else %}<p class="overview-empty">Ainda não há dados suficientes para a evolução.</p>{% endif %}
-  </section>
-
-  <section class="overview-grid equal overview-section cash-budget-grid" aria-label="Fluxo de caixa e orçamento">
-    <article class="panel" aria-label="Fluxo de caixa" data-cash-flow-panel>
-      <h2>Fluxo de caixa</h2>
-      <div class="cash-grid"><div class="cash-item"><div class="small">Entradas na conta</div><div class="value {{ fluxo_caixa.entradas|classe_valor }}">{{ fluxo_caixa.entradas|brl }}</div></div><div class="cash-item"><div class="small">Saídas da conta</div><div class="value {{ fluxo_caixa.saidas|classe_valor:'saida' }}">{{ fluxo_caixa.saidas|brl }}</div></div><div class="cash-item"><div class="small">Saldo próprio</div><div class="value {{ fluxo_caixa.saldo|classe_valor }}">{{ fluxo_caixa.saldo|brl_sinal }}</div></div><div class="cash-item"><div class="small">Receitas previstas</div><div class="value {{ fluxo_caixa.receitas_previstas|classe_valor }}">{{ fluxo_caixa.receitas_previstas|brl }}</div></div><div class="cash-item"><div class="small">Saídas previstas</div><div class="value {{ fluxo_caixa.saidas_previstas|classe_valor:'saida' }}">{{ fluxo_caixa.saidas_previstas|brl }}</div></div><div class="cash-item"><div class="small">Saldo projetado</div><div class="value {{ fluxo_caixa.saldo_projetado|classe_valor }}">{{ fluxo_caixa.saldo_projetado|brl_sinal }}</div></div></div>
-      <p class="overview-helper">Entradas e saídas mostram movimentos realizados, pagamentos de fatura e transferências. Receitas e saídas previstas consideram títulos em aberto no período; o saldo projetado combina o saldo atual com essas previsões.</p>
-    </article>
-    <article class="panel budget-panel" aria-labelledby="budgetTitle" data-budget-overview-panel>
-      <h2 id="budgetTitle">Orçamento <span class="collapsible-summary-meta">Total · <span>{{ orcamento_dashboard.total_orcado|brl }}</span> · {{ orcamento_dashboard.mes_rotulo }}</span></h2>
-      <div class="budget-content">
-        {% if orcamento_dashboard.categorias %}
-          <div class="budget-list" tabindex="0" aria-label="Categorias do orçamento">
-            {% for categoria in orcamento_dashboard.categorias %}
-              {% if categoria.realizado %}<a class="budget-item indicator-detail" href="{{ categoria.lancamentos_url }}" data-dashboard-detail-url="{{ categoria.detalhe_url }}" aria-label="Ver lançamentos que compõem o orçamento de {{ categoria.nome }}">{% else %}<div class="budget-item indicator-detail is-disabled" aria-disabled="true">{% endif %}
-                <div class="budget-item-head" aria-label="Orçamento de {{ categoria.nome }}: {{ categoria.orcado|brl }}; {% if categoria.participacao is None %}participação indisponível no orçamento total{% else %}{{ categoria.participacao|floatformat:2 }}% do orçamento total{% endif %}"><span class="indicator-detail-label">{{ categoria.nome }}{% if categoria.realizado %}<svg class="indicator-detail-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>{% endif %}</span><span class="budget-item-budget">{{ categoria.orcado|brl }} · {% if categoria.participacao is None %}—{% else %}{{ categoria.participacao|floatformat:2 }}%{% endif %}</span></div>
-                <div class="budget-expense-row"><span>Despesas</span><div class="budget-bar-track" role="progressbar" aria-label="{% if categoria.percentual_comprometido is None %}Comprometimento indisponível para {{ categoria.nome }}{% else %}{{ categoria.percentual_comprometido|floatformat:2 }}% comprometido em {{ categoria.nome }}{% endif %}"{% if categoria.percentual_comprometido is not None %} aria-valuemin="0" aria-valuemax="{{ categoria.percentual_comprometido_aria_max }}" aria-valuenow="{{ categoria.percentual_comprometido }}" aria-valuetext="{{ categoria.realizado|brl_sinal }} de {{ categoria.orcado|brl }}"{% endif %}><span class="budget-bar-fill {{ categoria.faixa_percentual }}" style="width:{{ categoria.percentual_comprometido_css }}%"></span></div><span class="budget-expense-values"><span class="{{ categoria.realizado|classe_valor:'saida' }}">{{ categoria.realizado|brl_sinal }}</span> · {% if categoria.percentual_comprometido is None %}<span>—</span>{% else %}<span>{{ categoria.percentual_comprometido|floatformat:2 }}%</span>{% endif %}</span></div>
-              {% if categoria.realizado %}</a>{% else %}</div>{% endif %}
-            {% endfor %}
-          </div>
-          <p class="overview-helper">Conta + cartão do mês completo, independentemente dos filtros financeiros acima.</p>
-        {% else %}
-          <p class="overview-empty">Nenhum orçamento cadastrado para {{ orcamento_dashboard.mes_rotulo }}.</p>
-        {% endif %}
       </div>
-    </article>
+    </details>
+    <details class="panel collapsible-panel" open aria-labelledby="attentionTitle" data-dashboard-panel-id="attention">
+      <summary class="collapsible-summary" title="Abrir ou fechar pontos de atenção">
+        <h2 id="attentionTitle">Pontos de atenção</h2>
+        <span class="collapsible-toggle" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>
+      </summary>
+      <div class="collapsible-content">
+      {% if pontos_atencao %}<div class="attention-list">{% for item in pontos_atencao %}<div class="attention-item"><h3>{{ item.titulo }}</h3><p>{{ item.mensagem }}</p>{% if item.tipo == "orcamento" %}<strong><span class="{{ item.realizado|classe_valor:'saida' }}">{{ item.realizado|brl_sinal }}</span> de <span>{{ item.orcado|brl }}</span></strong>{% else %}<strong class="{{ item.valor|classe_valor:'saida' }}">{{ item.valor|brl }}</strong>{% endif %}</div>{% endfor %}</div>{% else %}<p class="overview-empty">Nenhum ponto de atenção objetivo neste período.</p>{% endif %}
+      </div>
+    </details>
   </section>
 
-  <details class="panel full overview-section collapsible-panel comparison-panel" aria-labelledby="comparisonTitle" data-category-tabs>
-    <summary class="collapsible-summary comparison-panel-summary" title="Abrir ou fechar o comparativo de receitas e despesas">
+  <details class="panel full overview-section collapsible-panel" open aria-labelledby="evolutionTitle" data-dashboard-panel-id="evolution">
+    <summary class="collapsible-summary" title="Abrir ou fechar evolução financeira">
+      <span class="dashboard-panel-summary-heading"><h2 id="evolutionTitle">{% if analysis_basis == 'purchase' %}Evolução do consumo{% else %}Evolução financeira{% endif %}</h2><span class="analysis-basis-badge">{% if analysis_basis == 'purchase' %}Data da compra{% else %}Competência financeira{% endif %}</span></span>
+      <span class="collapsible-toggle" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>
+    </summary>
+    <div class="collapsible-content">
+    {% if evolucao %}<div class="evolution-table">{% for item in evolucao %}<div class="evolution-row"><span class="evolution-month">{{ item.rotulo }}</span><div class="evolution-bars"><div class="evolution-bar revenue" style="width:{{ item.receitas_percentual_css }}%" title="Receitas: {{ item.receitas|brl }}"></div><div class="evolution-bar expense" style="width:{{ item.despesas_percentual_css }}%" title="Despesas: {{ item.despesas|brl }}"></div><div class="evolution-bar result" style="width:{{ item.resultado_percentual_css }}%" title="Resultado: {{ item.resultado|brl_sinal }}"></div></div></div>{% endfor %}</div><div class="evolution-legend"><span><i class="legend-dot revenue"></i>Receitas</span><span><i class="legend-dot expense"></i>Despesas</span><span><i class="legend-dot result"></i>Resultado</span></div>{% else %}<p class="overview-empty">Ainda não há dados suficientes para a evolução.</p>{% endif %}
+    </div>
+  </details>
+
+  <details class="panel full overview-section collapsible-panel monthly-category-panel" aria-labelledby="monthlyCategoryTitle" data-dashboard-panel-id="monthly-category">
+    <summary class="collapsible-summary" title="Abrir ou fechar os gastos mensais por categoria">
+      <h2 class="monthly-category-summary-title" id="monthlyCategoryTitle">
+        <span>Gastos mensais por categoria</span>
+        <span class="analysis-basis-badge">{% if analysis_basis == 'purchase' %}Data da compra{% else %}Competência financeira{% endif %}</span>
+        <span class="collapsible-toggle" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span>
+      </h2>
+    </summary>
+    <div class="collapsible-content">
+      <div class="monthly-category-intro">
+        <p class="small">Comparação dos últimos 12 meses completos, encerrados no mês da data final selecionada. Cada variação compara o mês com o imediatamente anterior.</p>
+        <span class="monthly-category-scroll-hint">Deslize horizontalmente para consultar todos os meses.</span>
+      </div>
+      {% with insights=gastos_mensais_categoria.insights %}
+        {% if insights and gastos_mensais_categoria.categorias %}
+          <section class="monthly-category-insights" aria-labelledby="monthlyCategoryInsightsTitle">
+            <div class="monthly-category-insights-head">
+              <div>
+                <h3 id="monthlyCategoryInsightsTitle">Leitura do último mês</h3>
+                <p>Resumo dos gastos de {{ insights.periodo_atual_rotulo }} em comparação com {{ insights.periodo_anterior_rotulo }}.</p>
+              </div>
+              <span class="monthly-category-insights-period">{{ insights.periodo_anterior_rotulo }} → {{ insights.periodo_atual_rotulo }}</span>
+            </div>
+            <div class="monthly-category-insight-overview">
+              <article class="monthly-category-insight-card">
+                <span class="monthly-category-insight-label">Total computável</span>
+                <strong class="{{ insights.total_computa.valor_atual|classe_valor:'saida' }}">{{ insights.total_computa.valor_atual|brl_sinal }}</strong>
+                {% if insights.total_computa.variacao %}
+                  <span class="monthly-category-variation monthly-category-insight-variation state-{{ insights.total_computa.variacao.estado|lower }} direction-{{ insights.total_computa.variacao.direcao|lower }}">
+                    {% if insights.total_computa.variacao.direcao != 'NEUTRA' %}<svg class="monthly-category-variation-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg>{% endif %}
+                    <span>{{ insights.total_computa.variacao.texto }}{% if insights.total_computa.variacao.percentual is not None %}: {{ insights.total_computa.variacao.percentual|floatformat:2 }}%{% endif %}</span>
+                  </span>
+                {% endif %}
+                <small>Compõe o resultado · anterior: {{ insights.total_computa.valor_anterior|brl_sinal }}</small>
+              </article>
+              <article class="monthly-category-insight-card is-consultive">
+                <span class="monthly-category-insight-label">Total consultivo</span>
+                <strong>{{ insights.consultivo.valor_atual|brl_sinal }}</strong>
+                {% if insights.consultivo.variacao %}
+                  <span class="monthly-category-variation monthly-category-insight-variation is-consultive state-{{ insights.consultivo.variacao.estado|lower }} direction-{{ insights.consultivo.variacao.direcao|lower }}">
+                    {% if insights.consultivo.variacao.direcao != 'NEUTRA' %}<svg class="monthly-category-variation-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg>{% endif %}
+                    <span>{{ insights.consultivo.variacao.texto }}{% if insights.consultivo.variacao.percentual is not None %}: {{ insights.consultivo.variacao.percentual|floatformat:2 }}%{% endif %}</span>
+                  </span>
+                {% endif %}
+                <small>Não compõe o resultado{% if insights.consultivo.participacao is not None %} · {{ insights.consultivo.participacao|floatformat:2 }}% do total analisado{% endif %}</small>
+              </article>
+            </div>
+            <div class="monthly-category-rankings">
+              <section class="monthly-category-ranking is-increase" aria-labelledby="monthlyCategoryIncreasesTitle">
+                <h4 id="monthlyCategoryIncreasesTitle"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg>Maiores aumentos</h4>
+                {% if insights.aumentos %}
+                  <ol class="monthly-category-ranking-list">
+                    {% for item in insights.aumentos %}
+                      <li class="monthly-category-ranking-item">
+                        <span class="monthly-category-ranking-name">{{ item.nome }}</span>
+                        <span class="monthly-category-ranking-current">{{ item.valor_atual|brl_sinal }}</span>
+                        <span class="monthly-category-ranking-change">
+                          <span>Diferença: {{ item.diferenca|brl_sinal }}</span>
+                          <span class="monthly-category-variation state-{{ item.estado|lower }} direction-{{ item.direcao|lower }}">
+                            {% if item.direcao != 'NEUTRA' %}<svg class="monthly-category-variation-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg>{% endif %}
+                            <span>{% if item.percentual is not None %}{{ item.percentual|floatformat:2 }}%{% elif item.estado == 'NOVO' %}Novo no mês{% elif item.estado == 'SEM_BASE' %}Sem base anterior{% else %}{{ item.estado }}{% endif %}</span>
+                          </span>
+                        </span>
+                      </li>
+                    {% endfor %}
+                  </ol>
+                {% else %}<p class="monthly-category-ranking-empty">Nenhum aumento no último mês.</p>{% endif %}
+              </section>
+              <section class="monthly-category-ranking is-reduction" aria-labelledby="monthlyCategoryReductionsTitle">
+                <h4 id="monthlyCategoryReductionsTitle"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 5v14M5 12l7 7 7-7"/></svg>Maiores reduções</h4>
+                {% if insights.reducoes %}
+                  <ol class="monthly-category-ranking-list">
+                    {% for item in insights.reducoes %}
+                      <li class="monthly-category-ranking-item">
+                        <span class="monthly-category-ranking-name">{{ item.nome }}</span>
+                        <span class="monthly-category-ranking-current">{{ item.valor_atual|brl_sinal }}</span>
+                        <span class="monthly-category-ranking-change">
+                          <span>Diferença: {{ item.diferenca|brl_sinal }}</span>
+                          <span class="monthly-category-variation state-{{ item.estado|lower }} direction-{{ item.direcao|lower }}">
+                            {% if item.direcao != 'NEUTRA' %}<svg class="monthly-category-variation-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg>{% endif %}
+                            <span>{% if item.percentual is not None %}{{ item.percentual|floatformat:2 }}%{% elif item.estado == 'ZERADO' %}Zerado no mês{% else %}{{ item.estado }}{% endif %}</span>
+                          </span>
+                        </span>
+                      </li>
+                    {% endfor %}
+                  </ol>
+                {% else %}<p class="monthly-category-ranking-empty">Nenhuma redução no último mês.</p>{% endif %}
+              </section>
+            </div>
+          </section>
+        {% endif %}
+      {% endwith %}
+      {% if gastos_mensais_categoria.categorias %}
+        <div class="monthly-category-legend" aria-label="Legenda das variações mensais">
+          <strong>Legenda</strong>
+          <ul class="monthly-category-legend-list">
+            <li class="monthly-category-legend-item is-increase"><svg class="monthly-category-legend-arrow" aria-hidden="true" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg>Aumento de gasto</li>
+            <li class="monthly-category-legend-item is-reduction"><svg class="monthly-category-legend-arrow" aria-hidden="true" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg>Redução de gasto</li>
+            <li class="monthly-category-legend-item is-stable"><svg class="monthly-category-legend-arrow" aria-hidden="true" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg>Estável</li>
+            <li class="monthly-category-legend-item is-neutral"><span aria-hidden="true">○</span>Consultivo, sem impacto no resultado</li>
+          </ul>
+        </div>
+        <div class="monthly-category-table-wrap" tabindex="0" role="region" aria-label="Gastos mensais por categoria nos últimos 12 meses; role para os lados para consultar todos os meses">
+          <table class="monthly-category-table">
+            <caption class="monthly-category-visually-hidden">Gastos mensais por categoria nos últimos 12 meses, com variação em relação ao mês anterior.</caption>
+            <thead><tr><th scope="col">Categoria</th>{% for mes in gastos_mensais_categoria.meses %}<th scope="col"{% if forloop.last %} class="is-latest"{% endif %}>{{ mes.rotulo }}</th>{% endfor %}<th scope="col">Total 12 meses</th></tr></thead>
+            {% for categoria in gastos_mensais_categoria.categorias %}
+              <tbody class="monthly-category-group">
+                <tr{% if categoria.nao_computa_resultado %} class="monthly-category-consultive-row"{% endif %}>
+                  <th scope="row">
+                    {% if categoria.expansivel %}
+                      <button class="monthly-category-toggle" type="button" aria-expanded="false" aria-controls="monthly-category-subcategories-{{ categoria.computacao|lower }}-{{ categoria.categoria_id }}" aria-label="Expandir subcategorias de {{ categoria.nome }}" data-monthly-category-toggle data-expand-label="Expandir subcategorias de {{ categoria.nome }}" data-collapse-label="Recolher subcategorias de {{ categoria.nome }}">
+                        <svg class="monthly-category-chevron" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
+                        <span class="monthly-category-row-label"><span>{{ categoria.nome }}</span>{% if categoria.nao_computa_resultado %}<small>Não compõe no resultado</small>{% endif %}</span>
+                      </button>
+                    {% else %}<span class="monthly-category-row-label"><span>{{ categoria.nome }}</span>{% if categoria.nao_computa_resultado %}<small>Não compõe no resultado</small>{% endif %}</span>{% endif %}
+                  </th>
+                  {% for item in categoria.valores %}
+                    <td class="monthly-category-value-cell{% if forloop.last %} is-latest{% endif %}">
+                      {% if item.valor %}
+                        <a class="monthly-category-link{% if categoria.nao_computa_resultado %} is-consultive{% else %} {{ item.valor|classe_valor:'saida' }}{% endif %}" href="{% url 'eventos' %}?date_from={{ item.data_inicial|date:'d/m/Y'|urlencode }}&amp;date_to={{ item.data_final|date:'d/m/Y'|urlencode }}&amp;account={% if conta_selecionada %}{{ conta_selecionada.pk }}{% else %}all{% endif %}&amp;card={% if cartao_selecionado %}{{ cartao_selecionado.pk }}{% else %}all{% endif %}&amp;origin={% if origem_filtro == 'account' %}CONTA{% elif origem_filtro == 'card' %}CARTAO{% else %}all{% endif %}&amp;analysis_type=category&amp;analysis_value={% if categoria.categoria_id %}{{ categoria.categoria_id }}{% else %}unclassified{% endif %}&amp;analysis_nature={{ natureza_filtro }}&amp;computes={{ categoria.computacao }}&amp;analysis_basis={{ analysis_basis }}&amp;dashboard_context=1{% if categoria.categoria_id %}&amp;parent_category={{ categoria.categoria_id }}{% endif %}" data-dashboard-detail-url="{% url 'dashboard_detalhamento' %}?date_from={{ item.data_inicial|date:'d/m/Y'|urlencode }}&amp;date_to={{ item.data_final|date:'d/m/Y'|urlencode }}&amp;account={% if conta_selecionada %}{{ conta_selecionada.pk }}{% else %}all{% endif %}&amp;card={% if cartao_selecionado %}{{ cartao_selecionado.pk }}{% else %}all{% endif %}&amp;origin={{ origem_filtro }}&amp;nature={{ natureza_filtro }}&amp;type=category&amp;value={% if categoria.categoria_id %}{{ categoria.categoria_id }}{% else %}unclassified{% endif %}&amp;computes={{ categoria.computacao }}&amp;analysis_basis={{ analysis_basis }}&amp;dashboard_context=1">
+                          <span class="monthly-category-amount">{{ item.valor|brl_sinal }}</span>
+                          {% if item.variacao %}
+                            <span class="monthly-category-variation{% if categoria.nao_computa_resultado %} is-consultive{% endif %} state-{{ item.variacao.estado|lower }} direction-{{ item.variacao.direcao|lower }}">
+                              {% if item.variacao.direcao != 'NEUTRA' %}<svg class="monthly-category-variation-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg>{% endif %}
+                              <span class="monthly-category-visually-hidden">{{ item.variacao.texto }}{% if item.variacao.percentual is not None %}: {{ item.variacao.percentual|floatformat:2 }}%{% endif %}</span>
+                              <span aria-hidden="true">{% if item.variacao.percentual is not None %}{{ item.variacao.percentual|floatformat:2 }}%{% else %}{{ item.variacao.texto }}{% endif %}</span>
+                            </span>
+                          {% endif %}
+                          <span class="monthly-category-visually-hidden">Ver lançamentos de {{ categoria.nome }} em {{ item.ciclo }}</span>
+                        </a>
+                      {% else %}
+                        <span class="monthly-category-empty">
+                          <span>—</span>
+                          {% if item.variacao %}
+                            <span class="monthly-category-variation{% if categoria.nao_computa_resultado %} is-consultive{% endif %} state-{{ item.variacao.estado|lower }} direction-{{ item.variacao.direcao|lower }}">
+                              {% if item.variacao.direcao != 'NEUTRA' %}<svg class="monthly-category-variation-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg>{% endif %}
+                              <span class="monthly-category-visually-hidden">{{ item.variacao.texto }}{% if item.variacao.percentual is not None %}: {{ item.variacao.percentual|floatformat:2 }}%{% endif %}</span>
+                              <span aria-hidden="true">{% if item.variacao.percentual is not None %}{{ item.variacao.percentual|floatformat:2 }}%{% else %}{{ item.variacao.texto }}{% endif %}</span>
+                            </span>
+                          {% endif %}
+                        </span>
+                      {% endif %}
+                    </td>
+                  {% endfor %}
+                  <td class="monthly-category-total-cell{% if not categoria.nao_computa_resultado %} {{ categoria.total|classe_valor:'saida' }}{% endif %}"><strong>{{ categoria.total|brl_sinal }}</strong></td>
+                </tr>
+              </tbody>
+              {% if categoria.expansivel %}
+                <tbody class="monthly-category-subcategories" id="monthly-category-subcategories-{{ categoria.computacao|lower }}-{{ categoria.categoria_id }}" hidden>
+                  {% for subcategoria in categoria.subcategorias %}
+                    <tr class="monthly-category-subcategory{% if categoria.nao_computa_resultado %} monthly-category-consultive-row{% endif %}">
+                      <th scope="row"><span class="monthly-category-subcategory-label">{{ subcategoria.nome }}</span></th>
+                      {% for item in subcategoria.valores %}
+                        <td class="monthly-category-value-cell{% if forloop.last %} is-latest{% endif %}">
+                          {% if item.valor %}
+                            <a class="monthly-category-link{% if categoria.nao_computa_resultado %} is-consultive{% else %} {{ item.valor|classe_valor:'saida' }}{% endif %}" href="{% url 'eventos' %}?date_from={{ item.data_inicial|date:'d/m/Y'|urlencode }}&amp;date_to={{ item.data_final|date:'d/m/Y'|urlencode }}&amp;account={% if conta_selecionada %}{{ conta_selecionada.pk }}{% else %}all{% endif %}&amp;card={% if cartao_selecionado %}{{ cartao_selecionado.pk }}{% else %}all{% endif %}&amp;origin={% if origem_filtro == 'account' %}CONTA{% elif origem_filtro == 'card' %}CARTAO{% else %}all{% endif %}&amp;analysis_type=subcategory&amp;analysis_value={{ subcategoria.categoria_id }}&amp;analysis_nature={{ natureza_filtro }}&amp;computes={{ categoria.computacao }}&amp;analysis_basis={{ analysis_basis }}&amp;dashboard_context=1&amp;category={{ subcategoria.categoria_id }}" data-dashboard-detail-url="{% url 'dashboard_detalhamento' %}?date_from={{ item.data_inicial|date:'d/m/Y'|urlencode }}&amp;date_to={{ item.data_final|date:'d/m/Y'|urlencode }}&amp;account={% if conta_selecionada %}{{ conta_selecionada.pk }}{% else %}all{% endif %}&amp;card={% if cartao_selecionado %}{{ cartao_selecionado.pk }}{% else %}all{% endif %}&amp;origin={{ origem_filtro }}&amp;nature={{ natureza_filtro }}&amp;type=subcategory&amp;value={{ subcategoria.categoria_id }}&amp;computes={{ categoria.computacao }}&amp;analysis_basis={{ analysis_basis }}&amp;dashboard_context=1">
+                              <span class="monthly-category-amount">{{ item.valor|brl_sinal }}</span>
+                              {% if item.variacao %}
+                                <span class="monthly-category-variation{% if categoria.nao_computa_resultado %} is-consultive{% endif %} state-{{ item.variacao.estado|lower }} direction-{{ item.variacao.direcao|lower }}">
+                                  {% if item.variacao.direcao != 'NEUTRA' %}<svg class="monthly-category-variation-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg>{% endif %}
+                                  <span class="monthly-category-visually-hidden">{{ item.variacao.texto }}{% if item.variacao.percentual is not None %}: {{ item.variacao.percentual|floatformat:2 }}%{% endif %}</span>
+                                  <span aria-hidden="true">{% if item.variacao.percentual is not None %}{{ item.variacao.percentual|floatformat:2 }}%{% else %}{{ item.variacao.texto }}{% endif %}</span>
+                                </span>
+                              {% endif %}
+                              <span class="monthly-category-visually-hidden">Ver lançamentos de {{ subcategoria.nome }} em {{ item.ciclo }}</span>
+                            </a>
+                          {% else %}
+                            <span class="monthly-category-empty">
+                              <span>—</span>
+                              {% if item.variacao %}
+                                <span class="monthly-category-variation{% if categoria.nao_computa_resultado %} is-consultive{% endif %} state-{{ item.variacao.estado|lower }} direction-{{ item.variacao.direcao|lower }}">
+                                  {% if item.variacao.direcao != 'NEUTRA' %}<svg class="monthly-category-variation-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg>{% endif %}
+                                  <span class="monthly-category-visually-hidden">{{ item.variacao.texto }}{% if item.variacao.percentual is not None %}: {{ item.variacao.percentual|floatformat:2 }}%{% endif %}</span>
+                                  <span aria-hidden="true">{% if item.variacao.percentual is not None %}{{ item.variacao.percentual|floatformat:2 }}%{% else %}{{ item.variacao.texto }}{% endif %}</span>
+                                </span>
+                              {% endif %}
+                            </span>
+                          {% endif %}
+                        </td>
+                      {% endfor %}
+                      <td class="monthly-category-total-cell{% if not categoria.nao_computa_resultado %} {{ subcategoria.total|classe_valor:'saida' }}{% endif %}"><strong>{{ subcategoria.total|brl_sinal }}</strong></td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              {% endif %}
+            {% endfor %}
+            <tfoot>
+              <tr class="monthly-category-total-computable">
+                <th scope="row"><span class="monthly-category-total-label">Total computável<small>Compõe o resultado</small></span></th>
+                {% for item in gastos_mensais_categoria.totais.computa.valores %}
+                  <td{% if forloop.last %} class="is-latest"{% endif %}><span class="monthly-category-total-value"><strong>{{ item.valor|brl_sinal }}</strong>{% if item.variacao %}<span class="monthly-category-variation state-{{ item.variacao.estado|lower }} direction-{{ item.variacao.direcao|lower }}">{% if item.variacao.direcao != 'NEUTRA' %}<svg class="monthly-category-variation-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg>{% endif %}<span class="monthly-category-visually-hidden">{{ item.variacao.texto }}{% if item.variacao.percentual is not None %}: {{ item.variacao.percentual|floatformat:2 }}%{% endif %}</span><span aria-hidden="true">{% if item.variacao.percentual is not None %}{{ item.variacao.percentual|floatformat:2 }}%{% else %}{{ item.variacao.texto }}{% endif %}</span></span>{% endif %}</span></td>
+                {% endfor %}
+                <td class="monthly-category-total-cell {{ gastos_mensais_categoria.totais.computa.total|classe_valor:'saida' }}">{{ gastos_mensais_categoria.totais.computa.total|brl_sinal }}</td>
+              </tr>
+              <tr class="monthly-category-total-consultive">
+                <th scope="row"><span class="monthly-category-total-label">Total consultivo<small>Não compõe o resultado</small></span></th>
+                {% for item in gastos_mensais_categoria.totais.nao_computa.valores %}
+                  <td{% if forloop.last %} class="is-latest"{% endif %}><span class="monthly-category-total-value"><strong>{{ item.valor|brl_sinal }}</strong>{% if item.variacao %}<span class="monthly-category-variation is-consultive state-{{ item.variacao.estado|lower }} direction-{{ item.variacao.direcao|lower }}">{% if item.variacao.direcao != 'NEUTRA' %}<svg class="monthly-category-variation-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg>{% endif %}<span class="monthly-category-visually-hidden">{{ item.variacao.texto }}{% if item.variacao.percentual is not None %}: {{ item.variacao.percentual|floatformat:2 }}%{% endif %}</span><span aria-hidden="true">{% if item.variacao.percentual is not None %}{{ item.variacao.percentual|floatformat:2 }}%{% else %}{{ item.variacao.texto }}{% endif %}</span></span>{% endif %}</span></td>
+                {% endfor %}
+                <td class="monthly-category-total-cell">{{ gastos_mensais_categoria.totais.nao_computa.total|brl_sinal }}</td>
+              </tr>
+              <tr class="monthly-category-total-analyzed">
+                <th scope="row"><span class="monthly-category-total-label">Total analisado<small>Computável + consultivo</small></span></th>
+                {% for item in gastos_mensais_categoria.totais.geral.valores %}
+                  <td{% if forloop.last %} class="is-latest"{% endif %}><span class="monthly-category-total-value"><strong>{{ item.valor|brl_sinal }}</strong>{% if item.variacao %}<span class="monthly-category-variation state-{{ item.variacao.estado|lower }} direction-{{ item.variacao.direcao|lower }}">{% if item.variacao.direcao != 'NEUTRA' %}<svg class="monthly-category-variation-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg>{% endif %}<span class="monthly-category-visually-hidden">{{ item.variacao.texto }}{% if item.variacao.percentual is not None %}: {{ item.variacao.percentual|floatformat:2 }}%{% endif %}</span><span aria-hidden="true">{% if item.variacao.percentual is not None %}{{ item.variacao.percentual|floatformat:2 }}%{% else %}{{ item.variacao.texto }}{% endif %}</span></span>{% endif %}</span></td>
+                {% endfor %}
+                <td class="monthly-category-total-cell">{{ gastos_mensais_categoria.totais.geral.total|brl_sinal }}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      {% else %}<p class="overview-empty">Nenhum gasto encontrado nos 12 meses analisados.</p>{% endif %}
+    </div>
+  </details>
+
+  <details class="panel full overview-section collapsible-panel comparison-panel" aria-labelledby="comparisonTitle" data-category-tabs data-dashboard-panel-id="comparison">
+    <summary class="collapsible-summary comparison-panel-summary" title="{% if analysis_basis == 'purchase' %}Abrir ou fechar receitas versus gastos assumidos{% else %}Abrir ou fechar o comparativo de receitas e despesas{% endif %}">
       <div class="overview-heading comparison-heading">
         <div>
-          <h2 id="comparisonTitle">Comparativo de receitas e despesas</h2>
+          <h2 id="comparisonTitle">{% if analysis_basis == 'purchase' %}Receitas versus gastos assumidos{% else %}Comparativo de receitas e despesas{% endif %}</h2>
           <p class="small">Atual: {{ comparativo_categorias.data_inicial|date:"d/m/Y" }} a {{ comparativo_categorias.data_final|date:"d/m/Y" }} · Anterior: {{ comparativo_categorias.data_inicial_anterior|date:"d/m/Y" }} a {{ comparativo_categorias.data_final_anterior|date:"d/m/Y" }}</p>
         </div>
         <span class="small">Percentual do valor atual em relação ao anterior</span>
@@ -291,7 +577,7 @@
     </div>
   </details>
 
-  <details class="panel full overview-section collapsible-panel coverage-panel" aria-labelledby="coverageTitle" data-coverage-panel>
+  <details class="panel full overview-section collapsible-panel coverage-panel" aria-labelledby="coverageTitle" data-coverage-panel data-dashboard-panel-id="coverage">
     <summary class="collapsible-summary" title="Abrir ou fechar a cobertura dos gastos do mês">
       <span class="coverage-summary-title">
         <h2 id="coverageTitle">Cobertura dos gastos do mês</h2>
@@ -328,7 +614,7 @@
     </div>
   </details>
 
-  <details class="panel full overview-section collapsible-panel simulator-panel" aria-labelledby="simulatorTitle">
+  <details class="panel full overview-section collapsible-panel simulator-panel" aria-labelledby="simulatorTitle" data-dashboard-panel-id="simulator">
     <summary class="collapsible-summary" title="Abrir ou fechar o simulador de economia">
       <h2 id="simulatorTitle">Simulador de economia</h2>
       <span class="collapsible-toggle" aria-hidden="true">
@@ -395,9 +681,15 @@
     const notificationsMarkAll = notificationsDialog?.querySelector('[data-notifications-mark-all]');
     const notificationTabs = [...(notificationsDialog?.querySelectorAll('[data-notification-filter]') || [])];
     const valuesStorageKey = 'my-financeiro.dashboard.values-hidden';
+    const panelsStorageKey = 'my-financeiro.dashboard.panels-open';
+    const analysisBasisStorageKey = 'my-financeiro.dashboard.analysis-basis';
+    const analysisBasisFilter = document.getElementById('analysisBasisFilter');
+    const validAnalysisBases = new Set(['competence', 'purchase']);
+    const dashboardPanels = [...document.querySelectorAll('[data-dashboard-panel-id]')];
     const cashFlowPanel = document.querySelector('[data-cash-flow-panel]');
     const budgetOverviewPanel = document.querySelector('[data-budget-overview-panel]');
     const categoryTabGroups = [...document.querySelectorAll('[data-category-tabs]')];
+    const monthlyCategoryToggles = [...document.querySelectorAll('[data-monthly-category-toggle]')];
     const coverageHelp = document.querySelector('[data-coverage-help]');
     const coverageHelpButton = coverageHelp?.querySelector('[data-coverage-help-button]');
     const coverageTooltip = coverageHelp?.querySelector('[data-coverage-tooltip]');
@@ -408,10 +700,51 @@
     } catch (_error) {
       valuesHidden = false;
     }
+    let storedPanelStates = {};
+    try {
+      const parsedPanelStates = JSON.parse(window.localStorage.getItem(panelsStorageKey) || '{}');
+      if (parsedPanelStates && typeof parsedPanelStates === 'object' && !Array.isArray(parsedPanelStates)) storedPanelStates = parsedPanelStates;
+    } catch (_error) {
+      storedPanelStates = {};
+    }
+    try {
+      const hasExplicitAnalysisBasis = new URLSearchParams(window.location.search).has('analysis_basis');
+      const storedAnalysisBasis = window.localStorage.getItem(analysisBasisStorageKey);
+      if (analysisBasisFilter && hasExplicitAnalysisBasis && validAnalysisBases.has(analysisBasisFilter.value)) {
+        window.localStorage.setItem(analysisBasisStorageKey, analysisBasisFilter.value);
+      } else if (analysisBasisFilter && validAnalysisBases.has(storedAnalysisBasis) && storedAnalysisBasis !== analysisBasisFilter.value) {
+        analysisBasisFilter.value = storedAnalysisBasis;
+        filterForm?.requestSubmit();
+      }
+    } catch (_error) {
+      // O dashboard mantém a base recebida do servidor quando o armazenamento local está indisponível.
+    }
+    dashboardPanels.forEach((panel) => {
+      const panelId = panel.dataset.dashboardPanelId;
+      if (typeof storedPanelStates[panelId] === 'boolean') panel.open = storedPanelStates[panelId];
+    });
+    const persistDashboardPanelStates = () => {
+      const panelStates = Object.fromEntries(dashboardPanels.map((panel) => [panel.dataset.dashboardPanelId, panel.open]));
+      try {
+        window.localStorage.setItem(panelsStorageKey, JSON.stringify(panelStates));
+      } catch (_error) {
+        // O dashboard continua funcional quando o navegador bloqueia armazenamento local.
+      }
+    };
     const syncBudgetPanelHeight = () => {
       if (!cashFlowPanel || !budgetOverviewPanel) return;
+      if (!cashFlowPanel.open || !budgetOverviewPanel.open) {
+        budgetOverviewPanel.style.removeProperty('height');
+        return;
+      }
       budgetOverviewPanel.style.height = `${Math.ceil(cashFlowPanel.getBoundingClientRect().height)}px`;
     };
+    dashboardPanels.forEach((panel) => {
+      panel.addEventListener('toggle', () => {
+        persistDashboardPanelStates();
+        if (panel === cashFlowPanel || panel === budgetOverviewPanel) window.requestAnimationFrame(syncBudgetPanelHeight);
+      });
+    });
     if (cashFlowPanel && budgetOverviewPanel) {
       window.requestAnimationFrame(syncBudgetPanelHeight);
       if ('ResizeObserver' in window) {
@@ -524,6 +857,14 @@
         // O dashboard continua funcional quando o navegador bloqueia armazenamento local.
       }
       applyValuesVisibility();
+    });
+    analysisBasisFilter?.addEventListener('change', () => {
+      try {
+        if (validAnalysisBases.has(analysisBasisFilter.value)) window.localStorage.setItem(analysisBasisStorageKey, analysisBasisFilter.value);
+      } catch (_error) {
+        // O filtro continua funcional quando o navegador bloqueia armazenamento local.
+      }
+      filterForm.requestSubmit();
     });
     ['accountFilter', 'cardFilter', 'originFilter', 'natureFilter'].forEach((id) => document.getElementById(id)?.addEventListener('change', () => filterForm.requestSubmit()));
     const dashboardDateControls = Array.from(document.querySelectorAll('[data-dashboard-date-control]'));
@@ -871,6 +1212,16 @@
         });
       });
     });
+    monthlyCategoryToggles.forEach((toggle) => {
+      const subcategories = document.getElementById(toggle.getAttribute('aria-controls'));
+      if (!subcategories) return;
+      toggle.addEventListener('click', () => {
+        const expanded = toggle.getAttribute('aria-expanded') !== 'true';
+        toggle.setAttribute('aria-expanded', String(expanded));
+        toggle.setAttribute('aria-label', expanded ? toggle.dataset.collapseLabel : toggle.dataset.expandLabel);
+        subcategories.hidden = !expanded;
+      });
+    });
     let coverageHelpPinned = false;
     const positionCoverageTooltip = () => {
       if (!coverageHelpButton || !coverageTooltip || coverageTooltip.hidden) return;
@@ -958,6 +1309,7 @@
       }
       const trigger = event.target.closest('[data-dashboard-detail-url]');
       if (trigger) {
+        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
         event.preventDefault();
         openDetail(trigger);
       }

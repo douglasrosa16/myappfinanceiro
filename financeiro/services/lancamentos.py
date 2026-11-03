@@ -15,6 +15,7 @@ from django.utils import timezone
 from financeiro.models import (
     Ambito,
     Categoria,
+    CompraCartao,
     EventoFinanceiro,
     Fatura,
     ItemImportacao,
@@ -29,7 +30,7 @@ from financeiro.models import (
     Titulo,
 )
 from financeiro.services.cartoes_faturas import STATUS_FATURA_BLOQUEADA, criar_compra_cartao, editar_parcela_cartao
-from financeiro.services.dashboard import limites_periodo
+from financeiro.services.dashboard import limites_periodo, normalizar_base_analise
 from financeiro.services.filtros_financeiros import CICLO_PATTERN, resolver_filtros_financeiros
 from financeiro.services.importacao_ofx import recalcular_fatura
 from financeiro.services.saldo_contas import reprocessar_saldo_conta
@@ -301,6 +302,42 @@ def _linha_parcela(parcela: ParcelaCartao) -> LinhaLancamento:
     )
 
 
+def _linha_compra_analitica(compra: CompraCartao) -> LinhaLancamento:
+    """Representa a compra uma única vez para detalhamentos pela data da compra."""
+    evento = compra.evento
+    categoria, categoria_ids = _categorias_evento(evento)
+    natureza = evento.natureza
+    valor = compra.valor_total if compra.valor_total is not None else evento.valor
+    return LinhaLancamento(
+        origem="CARTAO",
+        registro_id=compra.pk,
+        evento_id=evento.pk,
+        data_original=compra.data_compra,
+        descricao=compra.estabelecimento or evento.descricao,
+        pessoa=_nome_pessoa_evento(evento),
+        pessoa_id=evento.pessoa_id,
+        ambito=ROTULOS_AMBITO.get(evento.ambito, evento.ambito or "Não definido"),
+        origem_nome=_nome_cadastro(compra.cartao.nome, compra.cartao.ativo),
+        origem_tipo=f"Cartão • Compra no cartão • {ROTULOS_NATUREZA.get(natureza, natureza)}",
+        categoria=categoria,
+        categoria_ids=categoria_ids,
+        natureza_valor=natureza,
+        situacao=ROTULOS_SITUACAO.get(evento.situacao, evento.situacao),
+        situacao_valor=evento.situacao,
+        valor=_valor_assinado(natureza, valor),
+        documento="",
+        parcela_numero=None,
+        parcela_total=None,
+        editar_url=reverse("evento_editar", args=[evento.pk]),
+        excluir_url=reverse("evento_excluir", args=[evento.pk]),
+        clonar_url=reverse("evento_clonar", args=[evento.pk]),
+        observacao=(evento.observacao or "").strip(),
+        recorrencia_numero=evento.numero_recorrencia,
+        recorrencia_total=evento.serie_recorrente.quantidade_ocorrencias if evento.serie_recorrente_id else None,
+        recorrencia_futuros=contar_recorrencias_futuras(evento),
+    )
+
+
 def _rotulo_ciclo_fatura(ciclo: str) -> str:
     try:
         ano, mes = (int(item) for item in ciclo.split("-", 1))
@@ -375,11 +412,13 @@ def consultar_lancamentos(
     analysis_value="",
     analysis_nature="all",
     analysis_scope="all",
+    analysis_basis="competence",
     group_card_invoices=False,
     card_purchase_date=False,
     dashboard_context=False,
 ) -> dict:
     origem = origem if origem in {"all", "CONTA", "CARTAO"} else "all"
+    analysis_basis = normalizar_base_analise(analysis_basis)
     situacao = situacao if situacao in {"all", Situacao.REALIZADO, Situacao.PREVISTO} else "all"
     periodo_filtro = periodo if CICLO_PATTERN.fullmatch(str(periodo or "")) else ""
     filtros = resolver_filtros_financeiros(
@@ -390,8 +429,8 @@ def consultar_lancamentos(
         aplicar_composicao_dashboard=dashboard_context,
     )
     if data_inicial is None and data_final is None:
-        hoje = timezone.localdate()
-        inicio, fim_exclusivo = limites_periodo(hoje.strftime("%Y-%m"))
+        ciclo_datas = periodo_filtro or timezone.localdate().strftime("%Y-%m")
+        inicio, fim_exclusivo = limites_periodo(ciclo_datas)
         fim = fim_exclusivo - timedelta(days=1)
     else:
         inicio = _data_filtro(data_inicial)
@@ -537,6 +576,7 @@ def consultar_lancamentos(
             cartao_id=cartao_id,
             origem={"CONTA": "account", "CARTAO": "card"}.get(origem, "all"),
             natureza=analysis_nature,
+            analysis_basis=analysis_basis,
             computacao=computa_resultado if computa_resultado != "all" else "COMPUTA",
             scope=analysis_scope,
             date_from=inicio,
@@ -546,7 +586,7 @@ def consultar_lancamentos(
         linhas = list(detalhe_analitico["linhas"])
 
     busca_normalizada = busca.strip().casefold()
-    filtros_categoria_ativos = any(
+    filtros_categoria_ativos = not detalhe_analitico and any(
         (
             categoria_id,
             categoria_superior_id,
@@ -627,6 +667,7 @@ def consultar_lancamentos(
         "analysis_value": analysis_value,
         "analysis_nature": analysis_nature,
         "analysis_scope": analysis_scope,
+        "analysis_basis": analysis_basis,
     }
     if group_card_invoices:
         parametros_filtro["group_card_invoices"] = "1"
@@ -666,6 +707,7 @@ def consultar_lancamentos(
         "analysis_value": analysis_value,
         "analysis_nature": analysis_nature,
         "analysis_scope": analysis_scope,
+        "analysis_basis": detalhe_analitico["analysis_basis"] if detalhe_analitico else analysis_basis,
         "analysis_label": detalhe_analitico["titulo_detalhamento"] if detalhe_analitico else "",
         "total_indicador": sum((linha.valor for linha in filtradas), ZERO) if detalhe_analitico else ZERO,
         "group_card_invoices": group_card_invoices,

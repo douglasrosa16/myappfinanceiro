@@ -562,6 +562,25 @@ def _valor_compra(
     return valor, True, _assinar_pesos_categoria(pesos_categoria, valor)
 
 
+def resolver_componentes_compra(
+    compra: CompraCartao,
+    natureza: str,
+    categorias: dict[int, Categoria],
+) -> tuple[Decimal, bool, list[dict]]:
+    """Resolve uma compra integral com a mesma regra usada pela cobertura.
+
+    O retorno público permite que outras análises por data da compra reutilizem
+    a estimativa e a distribuição exatas da cobertura, sem reinterpretar
+    parcelas, rateios, estornos ou categorias sem classificação.
+    """
+    valor, estimado, valores_categoria = _valor_compra(compra, natureza)
+    return (
+        valor,
+        estimado,
+        _componentes_categoria(valores_categoria, valor, categorias),
+    )
+
+
 def _compras_cartao(
     usuario,
     cartoes_ids: set[int],
@@ -592,7 +611,11 @@ def _compras_cartao(
     for compra in compras:
         if compra.evento.natureza in {NaturezaEvento.PAGAMENTO_FATURA, NaturezaEvento.TRANSFERENCIA}:
             continue
-        valor, estimado, valores_categoria = _valor_compra(compra, natureza)
+        valor, estimado, componentes_categoria = resolver_componentes_compra(
+            compra,
+            natureza,
+            categorias,
+        )
         if valor == ZERO:
             continue
         situacao = "Realizado" if compra.evento.situacao == Situacao.REALIZADO else "Previsto"
@@ -610,11 +633,7 @@ def _compras_cartao(
                 ),
                 evento_id=compra.evento_id,
                 registro_id=compra.pk,
-                componentes_categoria=_componentes_categoria(
-                    valores_categoria,
-                    valor,
-                    categorias,
-                ),
+                componentes_categoria=componentes_categoria,
             )
         )
     return itens

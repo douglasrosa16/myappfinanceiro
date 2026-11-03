@@ -14,6 +14,7 @@ from django.utils import timezone
 from financeiro.models import (
     Categoria,
     Cartao,
+    CompraCartao,
     Conta,
     EventoFinanceiro,
     Fatura,
@@ -28,7 +29,10 @@ from financeiro.models import (
 )
 from financeiro.services.filtros_financeiros import resolver_filtros_financeiros
 from financeiro.services.cartoes_faturas import calcular_totais_parcelas
-from financeiro.services.cobertura_credito import consultar_cobertura_credito
+from financeiro.services.cobertura_credito import (
+    consultar_cobertura_credito,
+    resolver_componentes_compra,
+)
 from financeiro.services.parcelas_futuras import contribuicoes_futuras
 from financeiro.services.saldo_contas import saldo_conta_ate
 
@@ -38,6 +42,11 @@ HUNDRED = Decimal("100")
 ORIGENS = {"all", "account", "card"}
 NATUREZAS_ANALITICAS = {"all", "personal", "business"}
 COMPUTACOES_ANALITICAS = {"COMPUTA", "NAO_COMPUTA"}
+BASES_ANALISE = {"competence", "purchase"}
+OPCOES_BASE_ANALISE = (
+    ("competence", "Competência financeira — parcelas mensais"),
+    ("purchase", "Data da compra — valor integral"),
+)
 ESSENCIALIDADES_COMPOSICAO = (
     Categoria.Essencialidade.ESSENCIAL,
     Categoria.Essencialidade.NECESSARIO_VARIAVEL,
@@ -56,10 +65,11 @@ NATUREZAS_DISTRIBUICAO = (
 @dataclass(frozen=True)
 class ContribuicaoAnalitica:
     origem: str
-    registro: MovimentoConta | ParcelaCartao
+    registro: MovimentoConta | ParcelaCartao | CompraCartao
     valor: Decimal
     natureza_evento: str
     categoria: Categoria | None
+    estimado: bool = False
 
     @property
     def valor_indicador(self) -> Decimal:
@@ -72,6 +82,14 @@ class ContribuicaoAnalitica:
         ):
             return -abs(self.valor)
         return ZERO
+
+    @property
+    def data_analise(self) -> date:
+        if isinstance(self.registro, MovimentoConta):
+            return self.registro.evento.data
+        if isinstance(self.registro, CompraCartao):
+            return self.registro.data_compra
+        return self.registro.vencimento
 
 
 def limites_periodo(ciclo: str) -> tuple[date, date]:
@@ -212,6 +230,10 @@ def _normalizar_filtro(valor: str | None, permitidos: set[str]) -> str:
     return valor if valor in permitidos else "all"
 
 
+def normalizar_base_analise(valor: str | None) -> str:
+    return valor if valor in BASES_ANALISE else "competence"
+
+
 def _natureza_compativel(categoria: Categoria | None, filtro: str) -> bool:
     if not categoria:
         return filtro == "all"
@@ -258,13 +280,14 @@ def _despesas_liquidas(analise: dict) -> Decimal:
 
 def _criar_contribuicao_analitica(
     origem: str,
-    registro: MovimentoConta | ParcelaCartao,
+    registro: MovimentoConta | ParcelaCartao | CompraCartao,
     valor: Decimal,
     natureza_evento: str,
     categoria: Categoria | None,
     filtro_natureza: str,
     computacao: str = "COMPUTA",
     incluir_receitas_nao_computaveis: bool = False,
+    estimado: bool = False,
 ) -> ContribuicaoAnalitica | None:
     if natureza_evento in {NaturezaEvento.PAGAMENTO_FATURA, NaturezaEvento.TRANSFERENCIA}:
         return None
@@ -299,6 +322,7 @@ def _criar_contribuicao_analitica(
         valor=abs(valor),
         natureza_evento=natureza_evento,
         categoria=categoria,
+        estimado=estimado,
     )
 
 
@@ -349,8 +373,12 @@ def gerar_contribuicoes_analiticas(
     filtro_natureza: str,
     computacao: str = "COMPUTA",
     incluir_receitas_nao_computaveis: bool = False,
+    analysis_basis: str = "competence",
+    compras: list[CompraCartao] | None = None,
+    categorias: dict[int, Categoria] | None = None,
 ) -> list[ContribuicaoAnalitica]:
     computacao = computacao if computacao in COMPUTACOES_ANALITICAS else "COMPUTA"
+    analysis_basis = normalizar_base_analise(analysis_basis)
     contribuicoes = []
     if origem != "card":
         for movimento in movimentos:
@@ -374,7 +402,7 @@ def gerar_contribuicoes_analiticas(
                 if contribuicao:
                     contribuicoes.append(contribuicao)
 
-    if origem != "account":
+    if origem != "account" and analysis_basis == "competence":
         for parcela in parcelas:
             contribuicao = _criar_contribuicao_analitica(
                 "CARTAO",
@@ -388,6 +416,38 @@ def gerar_contribuicoes_analiticas(
             )
             if contribuicao:
                 contribuicoes.append(contribuicao)
+
+    if origem != "account" and analysis_basis == "purchase":
+        categorias = categorias or {}
+        for compra in compras or []:
+            valor_total, estimado, componentes = resolver_componentes_compra(
+                compra,
+                filtro_natureza,
+                categorias,
+            )
+            if valor_total == ZERO:
+                continue
+            for componente in componentes:
+                categoria = categorias.get(componente["categoria_id"])
+                valor_componente = componente["valor"]
+                natureza_evento = (
+                    NaturezaEvento.ESTORNO
+                    if valor_componente < ZERO
+                    else compra.evento.natureza
+                )
+                contribuicao = _criar_contribuicao_analitica(
+                    "CARTAO",
+                    compra,
+                    abs(valor_componente),
+                    natureza_evento,
+                    categoria,
+                    filtro_natureza,
+                    computacao,
+                    incluir_receitas_nao_computaveis,
+                    estimado,
+                )
+                if contribuicao:
+                    contribuicoes.append(contribuicao)
     return contribuicoes
 
 
@@ -438,6 +498,38 @@ def _carregar_parcelas_cartao(usuario, cartoes: list[Cartao]) -> list[ParcelaCar
         .order_by("compra_id", "numero", "id")
     )
     return parcelas
+
+
+def _carregar_compras_cartao(
+    usuario,
+    cartoes: list[Cartao],
+    inicio: date,
+    fim: date,
+) -> list[CompraCartao]:
+    if not cartoes:
+        return []
+    return list(
+        CompraCartao.objects.filter(
+            usuario=usuario,
+            cartao_id__in=[cartao.pk for cartao in cartoes],
+            data_compra__gte=inicio,
+            data_compra__lt=fim,
+        )
+        .exclude(evento__situacao=Situacao.CANCELADO)
+        .exclude(
+            evento__natureza__in={
+                NaturezaEvento.PAGAMENTO_FATURA,
+                NaturezaEvento.TRANSFERENCIA,
+            }
+        )
+        .select_related("cartao", "evento__pessoa")
+        .prefetch_related(
+            "evento__rateios__categoria",
+            "parcelas__categoria",
+            "parcelas__fatura",
+        )
+        .order_by("data_compra", "id")
+    )
 
 
 def _parcelas_cartao(
@@ -867,20 +959,42 @@ def _pontos_atencao(atual: dict, anterior: dict) -> list[dict]:
 def _evolucao(
     usuario,
     contas,
+    cartoes,
     parcelas_cartao,
     ciclo,
     origem,
     filtro_natureza,
     categorias,
+    analysis_basis="competence",
 ) -> list[dict]:
+    ciclos = _ciclos_terminando(ciclo, 6)
+    inicio_serie, _ = limites_periodo(ciclos[0])
+    _, fim_serie = limites_periodo(ciclos[-1])
+    movimentos_serie = _movimentos_conta(usuario, contas, inicio_serie, fim_serie)
+    parcelas_serie = _parcelas_cartao(parcelas_cartao, inicio_serie, fim_serie)
+    compras_serie = (
+        _carregar_compras_cartao(usuario, cartoes, inicio_serie, fim_serie)
+        if normalizar_base_analise(analysis_basis) == "purchase"
+        else []
+    )
+    contribuicoes_serie = gerar_contribuicoes_analiticas(
+        movimentos_serie,
+        parcelas_serie,
+        origem,
+        filtro_natureza,
+        analysis_basis=analysis_basis,
+        compras=compras_serie,
+        categorias=categorias,
+    )
     evolucao = []
-    for item_ciclo in _ciclos_terminando(ciclo, 6):
+    for item_ciclo in ciclos:
         inicio, fim = limites_periodo(item_ciclo)
-        analise = _analisar_dados(
-            _movimentos_conta(usuario, contas, inicio, fim),
-            _parcelas_cartao(parcelas_cartao, inicio, fim),
-            origem,
-            filtro_natureza,
+        analise = _analisar_contribuicoes(
+            [
+                contribuicao
+                for contribuicao in contribuicoes_serie
+                if inicio <= contribuicao.data_analise < fim
+            ],
             categorias,
         )
         despesas = _despesas_liquidas(analise)
@@ -903,6 +1017,348 @@ def _evolucao(
         item["despesas_percentual_css"] = _percentual_css(item["despesas_percentual"])
         item["resultado_percentual_css"] = _percentual_css(item["resultado_percentual"])
     return evolucao
+
+
+def _variacao_mensal_gastos(
+    valor_atual: Decimal,
+    valor_anterior: Decimal | None,
+) -> dict:
+    """Descreve a mudança mensal sem inferir percentual para bases incomparáveis."""
+    if valor_anterior is None:
+        return {
+            "estado": "SEM_BASE",
+            "direcao": "NEUTRA",
+            "diferenca": None,
+            "percentual": None,
+            "texto": "Sem base anterior",
+        }
+
+    diferenca = (valor_atual - valor_anterior).quantize(Decimal("0.01"))
+    if valor_anterior == ZERO and valor_atual == ZERO:
+        return {
+            "estado": "SEM_MOVIMENTO",
+            "direcao": "NEUTRA",
+            "diferenca": diferenca,
+            "percentual": None,
+            "texto": "Sem movimento",
+        }
+    if valor_atual < ZERO:
+        return {
+            "estado": "CREDITO_LIQUIDO",
+            "direcao": "NEUTRA",
+            "diferenca": diferenca,
+            "percentual": None,
+            "texto": "Crédito líquido no mês",
+        }
+    if valor_anterior < ZERO:
+        return {
+            "estado": "BASE_CREDORA",
+            "direcao": "NEUTRA",
+            "diferenca": diferenca,
+            "percentual": None,
+            "texto": "Base anterior com crédito líquido",
+        }
+    if valor_atual == valor_anterior:
+        return {
+            "estado": "ESTAVEL",
+            "direcao": "ESTAVEL",
+            "diferenca": diferenca,
+            "percentual": ZERO if valor_anterior > ZERO else None,
+            "texto": "Estável em relação ao mês anterior",
+        }
+    if valor_anterior == ZERO:
+        return {
+            "estado": "NOVO",
+            "direcao": "ALTA",
+            "diferenca": diferenca,
+            "percentual": None,
+            "texto": "Novo gasto",
+        }
+
+    percentual = (diferenca / valor_anterior * HUNDRED).quantize(Decimal("0.01"))
+    if valor_atual == ZERO:
+        return {
+            "estado": "ZERADO",
+            "direcao": "BAIXA",
+            "diferenca": diferenca,
+            "percentual": percentual,
+            "texto": "Gasto zerado no mês",
+        }
+    if diferenca > ZERO:
+        return {
+            "estado": "AUMENTO",
+            "direcao": "ALTA",
+            "diferenca": diferenca,
+            "percentual": percentual,
+            "texto": "Aumento em relação ao mês anterior",
+        }
+    return {
+        "estado": "REDUCAO",
+        "direcao": "BAIXA",
+        "diferenca": diferenca,
+        "percentual": percentual,
+        "texto": "Redução em relação ao mês anterior",
+    }
+
+
+def _adicionar_variacoes_mensais(valores: list[dict]) -> list[dict]:
+    valor_anterior = None
+    for item in valores:
+        item["variacao"] = _variacao_mensal_gastos(item["valor"], valor_anterior)
+        valor_anterior = item["valor"]
+    return valores
+
+
+def _insights_gastos_mensais(
+    meses: list[dict],
+    categorias: list[dict],
+    totais: dict,
+) -> dict:
+    periodo_atual = meses[-1]
+    periodo_anterior = meses[-2]
+    total_computa_atual = totais["computa"]["valores"][-1]
+    total_computa_anterior = totais["computa"]["valores"][-2]
+    consultivo_atual = totais["nao_computa"]["valores"][-1]
+    total_geral_atual = totais["geral"]["valores"][-1]["valor"]
+
+    itens_ranking = []
+    for categoria in categorias:
+        if categoria["computacao"] != "COMPUTA":
+            continue
+        valor_atual = categoria["valores"][-1]
+        variacao = valor_atual["variacao"]
+        itens_ranking.append({
+            "nome": categoria["nome"],
+            "categoria_id": categoria["categoria_id"],
+            "valor_atual": valor_atual["valor"],
+            "diferenca": variacao["diferenca"],
+            "percentual": variacao["percentual"],
+            "estado": variacao["estado"],
+            "direcao": variacao["direcao"],
+        })
+
+    aumentos = [
+        item
+        for item in itens_ranking
+        if item["estado"] in {"AUMENTO", "NOVO"}
+    ]
+    aumentos.sort(
+        key=lambda item: (
+            -item["diferenca"],
+            -item["valor_atual"],
+            item["nome"].casefold(),
+            item["categoria_id"] is None,
+            item["categoria_id"] or 0,
+        )
+    )
+    reducoes = [
+        item
+        for item in itens_ranking
+        if item["estado"] in {"REDUCAO", "ZERADO"}
+    ]
+    reducoes.sort(
+        key=lambda item: (
+            item["diferenca"],
+            -item["valor_atual"],
+            item["nome"].casefold(),
+            item["categoria_id"] is None,
+            item["categoria_id"] or 0,
+        )
+    )
+
+    return {
+        "periodo_atual": periodo_atual["ciclo"],
+        "periodo_atual_rotulo": periodo_atual["rotulo"],
+        "periodo_anterior": periodo_anterior["ciclo"],
+        "periodo_anterior_rotulo": periodo_anterior["rotulo"],
+        "total_computa": {
+            "valor_atual": total_computa_atual["valor"],
+            "valor_anterior": total_computa_anterior["valor"],
+            "variacao": total_computa_atual["variacao"],
+        },
+        "consultivo": {
+            "valor_atual": consultivo_atual["valor"],
+            "participacao": (
+                _percentual(consultivo_atual["valor"], total_geral_atual)
+                if consultivo_atual["valor"] > ZERO and total_geral_atual > ZERO
+                else None
+            ),
+            "variacao": consultivo_atual["variacao"],
+        },
+        "aumentos": aumentos[:3],
+        "reducoes": reducoes[:3],
+    }
+
+
+def _gastos_mensais_por_categoria(
+    usuario,
+    contas: list[Conta],
+    cartoes: list[Cartao],
+    parcelas_cartao: list[ParcelaCartao],
+    ciclo: str,
+    origem: str,
+    filtro_natureza: str,
+    categorias: dict[int, Categoria],
+    analysis_basis: str,
+) -> dict:
+    analysis_basis = normalizar_base_analise(analysis_basis)
+    ciclos = _ciclos_terminando(ciclo, 12)
+    meses = []
+    for item_ciclo in ciclos:
+        inicio, fim = limites_periodo(item_ciclo)
+        meses.append({
+            "ciclo": item_ciclo,
+            "rotulo": _rotulo_ciclo(item_ciclo),
+            "data_inicial": inicio,
+            "data_final": fim - timedelta(days=1),
+        })
+
+    inicio_serie = meses[0]["data_inicial"]
+    fim_serie = meses[-1]["data_final"] + timedelta(days=1)
+    movimentos = _movimentos_conta(usuario, contas, inicio_serie, fim_serie)
+    parcelas = _parcelas_cartao(parcelas_cartao, inicio_serie, fim_serie)
+    compras = (
+        _carregar_compras_cartao(usuario, cartoes, inicio_serie, fim_serie)
+        if analysis_basis == "purchase"
+        else []
+    )
+    contribuicoes_por_computacao = {
+        computacao: gerar_contribuicoes_analiticas(
+            movimentos,
+            parcelas,
+            origem,
+            filtro_natureza,
+            computacao,
+            analysis_basis=analysis_basis,
+            compras=compras,
+            categorias=categorias,
+        )
+        for computacao in ("COMPUTA", "NAO_COMPUTA")
+    }
+    indice_ciclo = {item["ciclo"]: indice for indice, item in enumerate(meses)}
+    linhas: dict[tuple[int | None, str], dict] = {}
+    for computacao, contribuicoes in contribuicoes_por_computacao.items():
+        for contribuicao in contribuicoes:
+            valor = contribuicao.valor_indicador
+            if valor == ZERO:
+                continue
+            item_ciclo = contribuicao.data_analise.strftime("%Y-%m")
+            indice = indice_ciclo.get(item_ciclo)
+            if indice is None:
+                continue
+            superior = _categoria_superior(contribuicao.categoria, categorias)
+            categoria_id = superior.pk if superior else None
+            chave = (categoria_id, computacao)
+            linha = linhas.setdefault(
+                chave,
+                {
+                    "categoria_id": categoria_id,
+                    "codigo": superior.codigo if superior else "",
+                    "nome": superior.nome if superior else "A classificar",
+                    "computacao": computacao,
+                    "computa_resultado": computacao == "COMPUTA",
+                    "nao_computa_resultado": computacao == "NAO_COMPUTA",
+                    "valores": [ZERO for _ in meses],
+                    "total": ZERO,
+                    "subcategorias": {},
+                },
+            )
+            linha["valores"][indice] += valor
+            linha["total"] += valor
+            categoria = contribuicao.categoria
+            if categoria:
+                subcategoria = linha["subcategorias"].setdefault(
+                    categoria.pk,
+                    {
+                        "categoria_id": categoria.pk,
+                        "nome": (
+                            "Direto na categoria"
+                            if categoria.pk == categoria_id
+                            else categoria.nome
+                        ),
+                        "computacao": computacao,
+                        "valores": [ZERO for _ in meses],
+                        "total": ZERO,
+                    },
+                )
+                subcategoria["valores"][indice] += valor
+                subcategoria["total"] += valor
+
+    categorias_formatadas = []
+    for linha in linhas.values():
+        if not any(valor != ZERO for valor in linha["valores"]):
+            continue
+        subcategorias = []
+        for subcategoria in linha["subcategorias"].values():
+            if not any(valor != ZERO for valor in subcategoria["valores"]):
+                continue
+            subcategoria["valores"] = _adicionar_variacoes_mensais([
+                {
+                    "ciclo": mes["ciclo"],
+                    "valor": valor,
+                    "data_inicial": mes["data_inicial"],
+                    "data_final": mes["data_final"],
+                }
+                for mes, valor in zip(meses, subcategoria["valores"])
+            ])
+            subcategorias.append(subcategoria)
+        subcategorias.sort(
+            key=lambda item: (-item["total"], item["nome"].casefold())
+        )
+        linha["subcategorias"] = subcategorias
+        linha["expansivel"] = any(
+            item["categoria_id"] != linha["categoria_id"]
+            for item in subcategorias
+        )
+        linha["valores"] = _adicionar_variacoes_mensais([
+            {
+                "ciclo": mes["ciclo"],
+                "valor": valor,
+                "data_inicial": mes["data_inicial"],
+                "data_final": mes["data_final"],
+            }
+            for mes, valor in zip(meses, linha["valores"])
+        ])
+        categorias_formatadas.append(linha)
+    categorias_formatadas.sort(
+        key=lambda item: (-item["total"], item["nome"].casefold(), item["computacao"])
+    )
+
+    def totais(computacao: str | None = None) -> dict:
+        selecionadas = [
+            linha
+            for linha in categorias_formatadas
+            if computacao is None or linha["computacao"] == computacao
+        ]
+        valores = []
+        for indice, mes in enumerate(meses):
+            valores.append({
+                "ciclo": mes["ciclo"],
+                "valor": sum(
+                    (linha["valores"][indice]["valor"] for linha in selecionadas),
+                    ZERO,
+                ),
+            })
+        return {
+            "valores": _adicionar_variacoes_mensais(valores),
+            "total": sum((linha["total"] for linha in selecionadas), ZERO),
+        }
+
+    totais_formatados = {
+        "computa": totais("COMPUTA"),
+        "nao_computa": totais("NAO_COMPUTA"),
+        "geral": totais(),
+    }
+    return {
+        "meses": meses,
+        "categorias": categorias_formatadas,
+        "totais": totais_formatados,
+        "insights": _insights_gastos_mensais(
+            meses,
+            categorias_formatadas,
+            totais_formatados,
+        ),
+    }
 
 
 def _previstos_intervalo(
@@ -1247,6 +1703,7 @@ def carregar_contribuicoes_dashboard(
     date_from=None,
     date_to=None,
     aplicar_composicao_dashboard=False,
+    analysis_basis="competence",
 ) -> dict:
     data_inicial, data_final = _intervalo_dashboard(date_from, date_to, periodo)
     fim_exclusivo = data_final + timedelta(days=1)
@@ -1261,10 +1718,21 @@ def carregar_contribuicoes_dashboard(
     contas_filtradas = [filtros["conta_selecionada"]] if filtros["conta_selecionada"] else filtros["contas"]
     origem = _normalizar_filtro(origem, ORIGENS)
     natureza = _normalizar_filtro(natureza, NATUREZAS_ANALITICAS)
+    analysis_basis = normalizar_base_analise(analysis_basis)
     categorias = _mapa_categorias(usuario)
     parcelas_carregadas = _carregar_parcelas_cartao(usuario, filtros["cartoes_filtrados"])
     movimentos = _movimentos_conta(usuario, contas_filtradas, data_inicial, fim_exclusivo)
     parcelas = _parcelas_cartao(parcelas_carregadas, data_inicial, fim_exclusivo)
+    compras = (
+        _carregar_compras_cartao(
+            usuario,
+            filtros["cartoes_filtrados"],
+            data_inicial,
+            fim_exclusivo,
+        )
+        if analysis_basis == "purchase"
+        else []
+    )
 
     return {
         "data_inicial": data_inicial,
@@ -1275,10 +1743,12 @@ def carregar_contribuicoes_dashboard(
         "contas_filtradas": contas_filtradas,
         "origem": origem,
         "natureza": natureza,
+        "analysis_basis": analysis_basis,
         "categorias": categorias,
         "parcelas_carregadas": parcelas_carregadas,
         "movimentos": movimentos,
         "parcelas": parcelas,
+        "compras": compras,
         "aplicar_composicao_dashboard": aplicar_composicao_dashboard,
         "contribuicoes": gerar_contribuicoes_analiticas(
             movimentos,
@@ -1286,6 +1756,9 @@ def carregar_contribuicoes_dashboard(
             origem,
             natureza,
             computacao,
+            analysis_basis=analysis_basis,
+            compras=compras,
+            categorias=categorias,
         ),
     }
 
@@ -1299,6 +1772,7 @@ def consultar_dashboard(
     natureza="all",
     date_from=None,
     date_to=None,
+    analysis_basis="competence",
 ) -> dict:
     dados_analiticos = carregar_contribuicoes_dashboard(
         usuario,
@@ -1310,6 +1784,7 @@ def consultar_dashboard(
         date_from=date_from,
         date_to=date_to,
         aplicar_composicao_dashboard=True,
+        analysis_basis=analysis_basis,
     )
     data_inicial = dados_analiticos["data_inicial"]
     data_final = dados_analiticos["data_final"]
@@ -1319,10 +1794,12 @@ def consultar_dashboard(
     contas_filtradas = dados_analiticos["contas_filtradas"]
     origem = dados_analiticos["origem"]
     natureza = dados_analiticos["natureza"]
+    analysis_basis = dados_analiticos["analysis_basis"]
     categorias = dados_analiticos["categorias"]
     parcelas_carregadas = dados_analiticos["parcelas_carregadas"]
     movimentos_atual = dados_analiticos["movimentos"]
     parcelas_atual = dados_analiticos["parcelas"]
+    compras_atual = dados_analiticos["compras"]
     analise_atual = _analisar_contribuicoes(dados_analiticos["contribuicoes"], categorias)
     contribuicoes_nao_computaveis = gerar_contribuicoes_analiticas(
         movimentos_atual,
@@ -1330,6 +1807,9 @@ def consultar_dashboard(
         origem,
         natureza,
         "NAO_COMPUTA",
+        analysis_basis=analysis_basis,
+        compras=compras_atual,
+        categorias=categorias,
     )
     analise_nao_computavel = _analisar_contribuicoes(
         contribuicoes_nao_computaveis,
@@ -1339,11 +1819,24 @@ def consultar_dashboard(
     inicio_anterior, fim_anterior = _intervalo_anterior(data_inicial, data_final)
     movimentos_anterior = _movimentos_conta(usuario, contas_filtradas, inicio_anterior, fim_anterior)
     parcelas_anterior = _parcelas_cartao(parcelas_carregadas, inicio_anterior, fim_anterior)
+    compras_anterior = (
+        _carregar_compras_cartao(
+            usuario,
+            filtros["cartoes_filtrados"],
+            inicio_anterior,
+            fim_anterior,
+        )
+        if analysis_basis == "purchase"
+        else []
+    )
     contribuicoes_anterior = gerar_contribuicoes_analiticas(
         movimentos_anterior,
         parcelas_anterior,
         origem,
         natureza,
+        analysis_basis=analysis_basis,
+        compras=compras_anterior,
+        categorias=categorias,
     )
     analise_anterior = _analisar_contribuicoes(contribuicoes_anterior, categorias)
 
@@ -1352,6 +1845,7 @@ def consultar_dashboard(
     if inicio_comparativo == inicio_anterior and fim_comparativo_exclusivo == fim_anterior:
         movimentos_comparativo = movimentos_anterior
         parcelas_comparativo = parcelas_anterior
+        compras_comparativo = compras_anterior
         contribuicoes_comparativo = contribuicoes_anterior
     else:
         movimentos_comparativo = _movimentos_conta(
@@ -1365,11 +1859,24 @@ def consultar_dashboard(
             inicio_comparativo,
             fim_comparativo_exclusivo,
         )
+        compras_comparativo = (
+            _carregar_compras_cartao(
+                usuario,
+                filtros["cartoes_filtrados"],
+                inicio_comparativo,
+                fim_comparativo_exclusivo,
+            )
+            if analysis_basis == "purchase"
+            else []
+        )
         contribuicoes_comparativo = gerar_contribuicoes_analiticas(
             movimentos_comparativo,
             parcelas_comparativo,
             origem,
             natureza,
+            analysis_basis=analysis_basis,
+            compras=compras_comparativo,
+            categorias=categorias,
         )
     comparativo_categorias = _comparativo_categorias_formatado(
         categorias,
@@ -1382,6 +1889,9 @@ def consultar_dashboard(
                 natureza,
                 "NAO_COMPUTA",
                 incluir_receitas_nao_computaveis=True,
+                analysis_basis=analysis_basis,
+                compras=compras_atual,
+                categorias=categorias,
             ),
         },
         {
@@ -1393,6 +1903,9 @@ def consultar_dashboard(
                 natureza,
                 "NAO_COMPUTA",
                 incluir_receitas_nao_computaveis=True,
+                analysis_basis=analysis_basis,
+                compras=compras_comparativo,
+                categorias=categorias,
             ),
         },
         data_inicial,
@@ -1486,6 +1999,7 @@ def consultar_dashboard(
         "card": cartao_query,
         "origin": origem,
         "nature": natureza,
+        "analysis_basis": analysis_basis,
         "dashboard_context": "1",
     })
     lancamentos_base_query = urlencode({
@@ -1495,6 +2009,7 @@ def consultar_dashboard(
         "card": cartao_query,
         "origin": {"account": "CONTA", "card": "CARTAO"}.get(origem, "all"),
         "analysis_nature": natureza,
+        "analysis_basis": analysis_basis,
         "dashboard_context": "1",
     })
 
@@ -1507,6 +2022,17 @@ def consultar_dashboard(
         "periodo_referencia": periodo_referencia,
         "origem_filtro": origem,
         "natureza_filtro": natureza,
+        "analysis_basis": analysis_basis,
+        "analysis_basis_label": dict(OPCOES_BASE_ANALISE)[analysis_basis],
+        "analysis_bases": list(OPCOES_BASE_ANALISE),
+        "evolucao_titulo": (
+            "Evolução do consumo" if analysis_basis == "purchase" else "Evolução financeira"
+        ),
+        "comparativo_titulo": (
+            "Receitas versus gastos assumidos"
+            if analysis_basis == "purchase"
+            else "Comparativo de receitas e despesas"
+        ),
         "origens_analiticas": [("all", "Todos"), ("account", "Conta"), ("card", "Cartão")],
         "naturezas_analiticas": [("all", "Todas"), ("personal", "Pessoal"), ("business", "Empresarial")],
         "detalhe_base_query": detalhe_base_query,
@@ -1555,11 +2081,24 @@ def consultar_dashboard(
         "evolucao": _evolucao(
             usuario,
             contas_filtradas,
+            filtros["cartoes_filtrados"],
             parcelas_carregadas,
             periodo_referencia,
             origem,
             natureza,
             categorias,
+            analysis_basis,
+        ),
+        "gastos_mensais_categoria": _gastos_mensais_por_categoria(
+            usuario,
+            contas_filtradas,
+            filtros["cartoes_filtrados"],
+            parcelas_carregadas,
+            periodo_referencia,
+            origem,
+            natureza,
+            categorias,
+            analysis_basis,
         ),
         "dashboard_configurado": _dashboard_configurado(usuario),
     }

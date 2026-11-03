@@ -1,5 +1,6 @@
 from datetime import date, timedelta
 from decimal import Decimal
+import re
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlsplit
 
@@ -38,7 +39,12 @@ from financeiro.services.detalhamento_dashboard import (
     DetalhamentoDashboardInvalido,
     consultar_detalhamento_dashboard,
 )
-from financeiro.services.lancamentos import criar_lancamento, editar_lancamento_conta, excluir_lancamento_conta
+from financeiro.services.lancamentos import (
+    consultar_lancamentos,
+    criar_lancamento,
+    editar_lancamento_conta,
+    excluir_lancamento_conta,
+)
 from financeiro.services.saldo_contas import reprocessar_saldo_conta
 
 
@@ -234,6 +240,532 @@ class DashboardServiceTests(TestCase):
                 )
                 self.assertEqual(consulta["resumo"]["despesas"], Decimal("100.00"))
                 self.assertEqual(consulta["resumo"]["faturaAtual"], Decimal("100.00"))
+
+    def test_base_por_compra_reconhece_valor_integral_e_matriz_anual(self):
+        evento = EventoFinanceiro.objects.create(
+            usuario=self.usuario,
+            natureza=NaturezaEvento.DESPESA,
+            descricao="Compra parcelada",
+            data=date(2026, 9, 15),
+            valor=Decimal("300.00"),
+            situacao=Situacao.REALIZADO,
+        )
+        compra = CompraCartao.objects.create(
+            usuario=self.usuario,
+            cartao=self.cartao,
+            evento=evento,
+            estabelecimento="Compra parcelada",
+            data_compra=date(2026, 9, 15),
+            valor_total=Decimal("300.00"),
+            total_parcelas=3,
+        )
+        for numero, ciclo in enumerate(("2026-10", "2026-11", "2026-12"), start=1):
+            fatura = Fatura.objects.create(usuario=self.usuario, cartao=self.cartao, ciclo=ciclo)
+            ParcelaCartao.objects.create(
+                compra=compra,
+                fatura=fatura,
+                natureza=NaturezaEvento.DESPESA,
+                descricao=f"Compra parcelada {numero}/3",
+                data_original=date(2026, 9, 15),
+                categoria=self.alimentacao,
+                numero=numero,
+                total=3,
+                valor=Decimal("100.00"),
+                situacao=Situacao.REALIZADO,
+            )
+
+        consultiva = Categoria.objects.create(
+            usuario=self.usuario,
+            nome="Investimentos",
+            computa_resultado=False,
+        )
+        self.parcela(
+            "40.00",
+            categoria=consultiva,
+            ciclo="2026-11",
+            data_compra=date(2026, 10, 5),
+        )
+        self.movimento(
+            "-1114.30",
+            date(2026, 10, 13),
+            natureza=NaturezaEvento.PAGAMENTO_FATURA,
+            categoria=self.alimentacao,
+        )
+
+        setembro_competencia = consultar_dashboard(self.usuario, periodo="2026-09")
+        setembro_compra = consultar_dashboard(
+            self.usuario,
+            periodo="2026-09",
+            analysis_basis="purchase",
+        )
+        outubro_fallback = consultar_dashboard(
+            self.usuario,
+            periodo="2026-10",
+            analysis_basis="invalida",
+        )
+        outubro_compra = consultar_dashboard(
+            self.usuario,
+            date_from="10/10/2026",
+            date_to="15/10/2026",
+            analysis_basis="purchase",
+        )
+
+        self.assertEqual(setembro_competencia["resumo"]["despesas"], Decimal("0.00"))
+        self.assertEqual(setembro_compra["resumo"]["despesas"], Decimal("300.00"))
+        self.assertEqual(outubro_fallback["analysis_basis"], "competence")
+        self.assertEqual(outubro_fallback["resumo"]["despesas"], Decimal("100.00"))
+        self.assertEqual(outubro_compra["resumo"]["despesas"], Decimal("0.00"))
+
+        matriz = outubro_compra["gastos_mensais_categoria"]
+        self.assertEqual(
+            [mes["ciclo"] for mes in matriz["meses"]],
+            [
+                "2025-11",
+                "2025-12",
+                "2026-01",
+                "2026-02",
+                "2026-03",
+                "2026-04",
+                "2026-05",
+                "2026-06",
+                "2026-07",
+                "2026-08",
+                "2026-09",
+                "2026-10",
+            ],
+        )
+        self.assertEqual(
+            [item["ciclo"] for item in outubro_compra["evolucao"]],
+            ["2026-05", "2026-06", "2026-07", "2026-08", "2026-09", "2026-10"],
+        )
+        self.assertEqual(matriz["meses"][-1]["data_final"], date(2026, 10, 31))
+        alimentacao = next(
+            item
+            for item in matriz["categorias"]
+            if item["nome"] == "Alimentação fora" and item["computacao"] == "COMPUTA"
+        )
+        investimentos = next(
+            item
+            for item in matriz["categorias"]
+            if item["nome"] == "Investimentos" and item["computacao"] == "NAO_COMPUTA"
+        )
+        self.assertEqual(alimentacao["total"], Decimal("300.00"))
+        self.assertEqual(alimentacao["valores"][-2]["valor"], Decimal("300.00"))
+        self.assertEqual(alimentacao["valores"][-2]["variacao"]["estado"], "NOVO")
+        self.assertEqual(alimentacao["valores"][-1]["variacao"]["estado"], "ZERADO")
+        self.assertEqual(
+            alimentacao["valores"][-1]["variacao"]["percentual"],
+            Decimal("-100.00"),
+        )
+        self.assertEqual(investimentos["total"], Decimal("40.00"))
+        self.assertTrue(investimentos["nao_computa_resultado"])
+        self.assertEqual(matriz["totais"]["computa"]["total"], Decimal("300.00"))
+        self.assertEqual(matriz["totais"]["nao_computa"]["total"], Decimal("40.00"))
+        self.assertEqual(matriz["totais"]["geral"]["total"], Decimal("340.00"))
+        self.assertEqual(
+            matriz["insights"]["total_computa"]["variacao"]["estado"],
+            "ZERADO",
+        )
+
+    def test_base_por_compra_trata_componente_negativo_como_estorno(self):
+        self.parcela(
+            "100.00",
+            categoria=self.alimentacao,
+            ciclo="2026-11",
+            data_compra=date(2026, 10, 5),
+        )
+        self.parcela(
+            "25.00",
+            natureza=NaturezaEvento.ESTORNO,
+            categoria=self.alimentacao,
+            ciclo="2026-11",
+            data_compra=date(2026, 10, 6),
+        )
+
+        consulta = consultar_dashboard(
+            self.usuario,
+            periodo="2026-10",
+            analysis_basis="purchase",
+        )
+
+        self.assertEqual(consulta["resumo"]["despesas"], Decimal("75.00"))
+        self.assertEqual(consulta["gastos_por_categoria"][0]["valor"], Decimal("75.00"))
+        self.assertEqual(
+            consulta["gastos_mensais_categoria"]["totais"]["computa"]["total"],
+            Decimal("75.00"),
+        )
+
+    def test_matriz_mensal_detalha_subcategorias_e_concilia_hierarquia(self):
+        superior = Categoria.objects.create(usuario=self.usuario, nome="Casa")
+        filha = Categoria.objects.create(
+            usuario=self.usuario,
+            nome="Manutenção",
+            categoria_pai=superior,
+        )
+        intermediaria = Categoria.objects.create(
+            usuario=self.usuario,
+            nome="Serviços",
+            categoria_pai=superior,
+        )
+        neta = Categoria.objects.create(
+            usuario=self.usuario,
+            nome="Jardinagem",
+            categoria_pai=intermediaria,
+        )
+        consultiva = Categoria.objects.create(
+            usuario=self.usuario,
+            nome="Patrimônio",
+        )
+        consultiva_filha = Categoria.objects.create(
+            usuario=self.usuario,
+            nome="Benfeitorias",
+            categoria_pai=consultiva,
+            computa_resultado=False,
+        )
+
+        self.movimento("-40.00", date(2026, 10, 2), categoria=superior)
+        self.movimento("-100.00", date(2026, 10, 3), categoria=filha)
+        self.movimento("-75.00", date(2026, 10, 4), categoria=neta)
+        rateado = self.movimento("-60.00", date(2026, 10, 5))
+        RateioCategoria.objects.create(evento=rateado.evento, categoria=filha, valor=Decimal("20.00"))
+        RateioCategoria.objects.create(evento=rateado.evento, categoria=neta, valor=Decimal("40.00"))
+        self.movimento(
+            "25.00",
+            date(2026, 10, 6),
+            natureza=NaturezaEvento.ESTORNO,
+            categoria=filha,
+        )
+        self.movimento("-33.00", date(2026, 10, 7), categoria=consultiva_filha)
+        self.movimento("-12.00", date(2026, 10, 8))
+
+        matriz = consultar_dashboard(
+            self.usuario,
+            periodo="2026-10",
+        )["gastos_mensais_categoria"]
+
+        casa = next(item for item in matriz["categorias"] if item["categoria_id"] == superior.pk)
+        self.assertTrue(casa["expansivel"])
+        self.assertEqual(casa["total"], Decimal("250.00"))
+        self.assertEqual(casa["valores"][-1]["valor"], Decimal("250.00"))
+        self.assertEqual(
+            [(item["categoria_id"], item["nome"], item["total"]) for item in casa["subcategorias"]],
+            [
+                (neta.pk, "Jardinagem", Decimal("115.00")),
+                (filha.pk, "Manutenção", Decimal("95.00")),
+                (superior.pk, "Direto na categoria", Decimal("40.00")),
+            ],
+        )
+        self.assertNotIn(intermediaria.pk, [item["categoria_id"] for item in casa["subcategorias"]])
+        self.assertEqual(
+            sum((item["total"] for item in casa["subcategorias"]), Decimal("0.00")),
+            casa["total"],
+        )
+        for indice in range(12):
+            self.assertEqual(
+                sum(
+                    (item["valores"][indice]["valor"] for item in casa["subcategorias"]),
+                    Decimal("0.00"),
+                ),
+                casa["valores"][indice]["valor"],
+            )
+
+        patrimonio = next(
+            item for item in matriz["categorias"] if item["categoria_id"] == consultiva.pk
+        )
+        self.assertTrue(patrimonio["expansivel"])
+        self.assertTrue(patrimonio["nao_computa_resultado"])
+        self.assertEqual(patrimonio["subcategorias"][0]["categoria_id"], consultiva_filha.pk)
+        self.assertEqual(patrimonio["subcategorias"][0]["total"], Decimal("33.00"))
+
+        sem_categoria = next(
+            item for item in matriz["categorias"] if item["categoria_id"] is None
+        )
+        self.assertEqual(sem_categoria["nome"], "A classificar")
+        self.assertFalse(sem_categoria["expansivel"])
+        self.assertEqual(sem_categoria["subcategorias"], [])
+        self.assertEqual(matriz["totais"]["computa"]["total"], Decimal("262.00"))
+        self.assertEqual(matriz["totais"]["nao_computa"]["total"], Decimal("33.00"))
+        self.assertEqual(matriz["totais"]["geral"]["total"], Decimal("295.00"))
+
+        detalhe_rateio = consultar_detalhamento_dashboard(
+            self.usuario,
+            "subcategory",
+            str(filha.pk),
+            date_from="01/10/2026",
+            date_to="31/10/2026",
+            origem="account",
+        )
+        linha_rateio = next(
+            linha for linha in detalhe_rateio["linhas"] if linha.registro_id == rateado.pk
+        )
+        self.assertEqual(detalhe_rateio["total_indicador"], Decimal("95.00"))
+        self.assertEqual(linha_rateio.valor, Decimal("20.00"))
+        self.assertEqual(linha_rateio.categoria_ids, (filha.pk,))
+
+        listagem_rateio = consultar_lancamentos(
+            self.usuario,
+            origem="CONTA",
+            data_inicial="01/10/2026",
+            data_final="31/10/2026",
+            computa_resultado="COMPUTA",
+            analysis_type="subcategory",
+            analysis_value=str(filha.pk),
+            dashboard_context=True,
+        )
+        linha_rateio_fallback = next(
+            linha for linha in listagem_rateio["linhas"] if linha.registro_id == rateado.pk
+        )
+        self.assertEqual(listagem_rateio["total_indicador"], Decimal("95.00"))
+        self.assertEqual(linha_rateio_fallback.valor, Decimal("20.00"))
+        self.assertEqual(linha_rateio_fallback.categoria_ids, (filha.pk,))
+
+    def test_matriz_anual_calcula_onze_variacoes_e_todos_os_estados(self):
+        superior = Categoria.objects.create(usuario=self.usuario, nome="Moradia")
+        subcategoria = Categoria.objects.create(
+            usuario=self.usuario,
+            nome="Condomínio",
+            categoria_pai=superior,
+        )
+        for data_movimento, valor in (
+            (date(2026, 1, 10), "-100.00"),
+            (date(2026, 3, 10), "-50.00"),
+            (date(2026, 4, 10), "-75.00"),
+            (date(2026, 5, 10), "-50.00"),
+            (date(2026, 6, 10), "-50.00"),
+            (date(2026, 9, 10), "-30.00"),
+        ):
+            self.movimento(valor, data_movimento, categoria=subcategoria)
+        for mes in (7, 8):
+            self.movimento(
+                "20.00",
+                date(2026, mes, 10),
+                natureza=NaturezaEvento.ESTORNO,
+                categoria=subcategoria,
+            )
+
+        matriz = consultar_dashboard(
+            self.usuario,
+            periodo="2026-10",
+        )["gastos_mensais_categoria"]
+        categoria = next(
+            item for item in matriz["categorias"] if item["categoria_id"] == superior.pk
+        )
+        detalhe = categoria["subcategorias"][0]
+        estados_esperados = [
+            "SEM_BASE",
+            "SEM_MOVIMENTO",
+            "NOVO",
+            "ZERADO",
+            "NOVO",
+            "AUMENTO",
+            "REDUCAO",
+            "ESTAVEL",
+            "CREDITO_LIQUIDO",
+            "CREDITO_LIQUIDO",
+            "BASE_CREDORA",
+            "ZERADO",
+        ]
+        direcoes_esperadas = [
+            "NEUTRA",
+            "NEUTRA",
+            "ALTA",
+            "BAIXA",
+            "ALTA",
+            "ALTA",
+            "BAIXA",
+            "ESTAVEL",
+            "NEUTRA",
+            "NEUTRA",
+            "NEUTRA",
+            "BAIXA",
+        ]
+
+        for valores in (
+            categoria["valores"],
+            detalhe["valores"],
+            matriz["totais"]["computa"]["valores"],
+            matriz["totais"]["geral"]["valores"],
+        ):
+            self.assertEqual(len(valores), 12)
+            self.assertEqual(
+                [item["variacao"]["estado"] for item in valores],
+                estados_esperados,
+            )
+            self.assertEqual(
+                [item["variacao"]["direcao"] for item in valores],
+                direcoes_esperadas,
+            )
+            self.assertEqual(
+                sum(item["variacao"]["estado"] != "SEM_BASE" for item in valores),
+                11,
+            )
+            self.assertTrue(all(item["variacao"]["texto"] for item in valores))
+
+        variacoes = categoria["valores"]
+        self.assertEqual(variacoes[2]["variacao"]["texto"], "Novo gasto")
+        self.assertEqual(variacoes[3]["variacao"]["diferenca"], Decimal("-100.00"))
+        self.assertEqual(variacoes[3]["variacao"]["percentual"], Decimal("-100.00"))
+        self.assertIsNone(variacoes[4]["variacao"]["percentual"])
+        self.assertEqual(variacoes[5]["variacao"]["diferenca"], Decimal("25.00"))
+        self.assertEqual(variacoes[5]["variacao"]["percentual"], Decimal("50.00"))
+        self.assertEqual(variacoes[6]["variacao"]["diferenca"], Decimal("-25.00"))
+        self.assertEqual(variacoes[6]["variacao"]["percentual"], Decimal("-33.33"))
+        self.assertEqual(variacoes[7]["variacao"]["percentual"], Decimal("0.00"))
+        self.assertIsNone(variacoes[8]["variacao"]["percentual"])
+        self.assertIsNone(variacoes[9]["variacao"]["percentual"])
+        self.assertIsNone(variacoes[10]["variacao"]["percentual"])
+
+        totais_consultivos = matriz["totais"]["nao_computa"]["valores"]
+        self.assertEqual(totais_consultivos[0]["variacao"]["estado"], "SEM_BASE")
+        self.assertTrue(
+            all(
+                item["variacao"]["estado"] == "SEM_MOVIMENTO"
+                for item in totais_consultivos[1:]
+            )
+        )
+        self.assertIsNone(matriz["insights"]["consultivo"]["participacao"])
+
+    def test_insights_do_ultimo_mes_separam_consultivos_e_desempatam_por_impacto(self):
+        alimentacao = Categoria.objects.create(usuario=self.usuario, nome="Alimentação")
+        casa_primeira = Categoria.objects.create(usuario=self.usuario, nome="Casa A")
+        casa_segunda = Categoria.objects.create(usuario=self.usuario, nome="Casa B")
+        transporte = Categoria.objects.create(usuario=self.usuario, nome="Transporte")
+        energia = Categoria.objects.create(usuario=self.usuario, nome="Energia")
+        mercado_primeiro = Categoria.objects.create(usuario=self.usuario, nome="Mercado A")
+        mercado_segundo = Categoria.objects.create(usuario=self.usuario, nome="Mercado B")
+        lazer = Categoria.objects.create(usuario=self.usuario, nome="Lazer")
+        investimentos = Categoria.objects.create(
+            usuario=self.usuario,
+            nome="Investimentos",
+            computa_resultado=False,
+        )
+
+        def registrar(categoria, setembro, outubro):
+            self.movimento(
+                f"-{setembro:.2f}",
+                date(2026, 9, 10),
+                categoria=categoria,
+            )
+            self.movimento(
+                f"-{outubro:.2f}",
+                date(2026, 10, 10),
+                categoria=categoria,
+            )
+
+        registrar(alimentacao, Decimal("100.00"), Decimal("400.00"))
+        for categoria in (casa_primeira, casa_segunda):
+            registrar(categoria, Decimal("100.00"), Decimal("250.00"))
+        registrar(transporte, Decimal("50.00"), Decimal("200.00"))
+        registrar(energia, Decimal("300.00"), Decimal("50.00"))
+        for categoria in (mercado_primeiro, mercado_segundo):
+            registrar(categoria, Decimal("300.00"), Decimal("100.00"))
+        registrar(lazer, Decimal("250.00"), Decimal("50.00"))
+        registrar(investimentos, Decimal("40.00"), Decimal("100.00"))
+
+        insights = consultar_dashboard(
+            self.usuario,
+            periodo="2026-10",
+        )["gastos_mensais_categoria"]["insights"]
+
+        self.assertEqual(insights["periodo_atual"], "2026-10")
+        self.assertEqual(insights["periodo_anterior"], "2026-09")
+        self.assertEqual(insights["periodo_atual_rotulo"], "10/2026")
+        self.assertEqual(insights["periodo_anterior_rotulo"], "09/2026")
+        self.assertEqual(insights["total_computa"]["valor_atual"], Decimal("1400.00"))
+        self.assertEqual(insights["total_computa"]["valor_anterior"], Decimal("1500.00"))
+        self.assertEqual(
+            insights["total_computa"]["variacao"]["estado"],
+            "REDUCAO",
+        )
+        self.assertEqual(
+            insights["total_computa"]["variacao"]["diferenca"],
+            Decimal("-100.00"),
+        )
+        self.assertEqual(
+            insights["total_computa"]["variacao"]["percentual"],
+            Decimal("-6.67"),
+        )
+
+        self.assertEqual(insights["consultivo"]["valor_atual"], Decimal("100.00"))
+        self.assertEqual(insights["consultivo"]["participacao"], Decimal("6.67"))
+        self.assertEqual(insights["consultivo"]["variacao"]["estado"], "AUMENTO")
+        self.assertEqual(
+            insights["consultivo"]["variacao"]["diferenca"],
+            Decimal("60.00"),
+        )
+
+        self.assertEqual(len(insights["aumentos"]), 3)
+        self.assertEqual(
+            [item["categoria_id"] for item in insights["aumentos"]],
+            [alimentacao.pk, casa_primeira.pk, casa_segunda.pk],
+        )
+        self.assertEqual(
+            [item["diferenca"] for item in insights["aumentos"]],
+            [Decimal("300.00"), Decimal("150.00"), Decimal("150.00")],
+        )
+        self.assertTrue(all(item["estado"] == "AUMENTO" for item in insights["aumentos"]))
+        self.assertTrue(all(item["direcao"] == "ALTA" for item in insights["aumentos"]))
+
+        self.assertEqual(len(insights["reducoes"]), 3)
+        self.assertEqual(
+            [item["categoria_id"] for item in insights["reducoes"]],
+            [energia.pk, mercado_primeiro.pk, mercado_segundo.pk],
+        )
+        self.assertEqual(
+            [item["diferenca"] for item in insights["reducoes"]],
+            [Decimal("-250.00"), Decimal("-200.00"), Decimal("-200.00")],
+        )
+        ids_rankeados = {
+            item["categoria_id"]
+            for grupo in (insights["aumentos"], insights["reducoes"])
+            for item in grupo
+        }
+        self.assertNotIn(investimentos.pk, ids_rankeados)
+
+    def test_insights_desempatam_categoria_identificada_antes_de_a_classificar(self):
+        categoria = Categoria.objects.create(usuario=self.usuario, nome="A classificar")
+        self.movimento("-100.00", date(2026, 9, 10), categoria=categoria)
+        self.movimento("-200.00", date(2026, 10, 10), categoria=categoria)
+        self.movimento("-100.00", date(2026, 9, 11))
+        self.movimento("-200.00", date(2026, 10, 11))
+
+        aumentos = consultar_dashboard(
+            self.usuario,
+            periodo="2026-10",
+        )["gastos_mensais_categoria"]["insights"]["aumentos"]
+
+        self.assertEqual([item["nome"] for item in aumentos], ["A classificar", "A classificar"])
+        self.assertEqual(
+            [item["categoria_id"] for item in aumentos],
+            [categoria.pk, None],
+        )
+
+    def test_insights_nao_calculam_participacao_sobre_credito_consultivo(self):
+        computavel = Categoria.objects.create(usuario=self.usuario, nome="Moradia")
+        consultiva = Categoria.objects.create(
+            usuario=self.usuario,
+            nome="Ajuste patrimonial",
+            computa_resultado=False,
+        )
+        self.movimento("-100.00", date(2026, 10, 10), categoria=computavel)
+        self.movimento(
+            "20.00",
+            date(2026, 10, 11),
+            natureza=NaturezaEvento.ESTORNO,
+            categoria=consultiva,
+        )
+
+        insights = consultar_dashboard(
+            self.usuario,
+            periodo="2026-10",
+        )["gastos_mensais_categoria"]["insights"]
+
+        self.assertEqual(insights["consultivo"]["valor_atual"], Decimal("-20.00"))
+        self.assertEqual(
+            insights["consultivo"]["variacao"]["estado"],
+            "CREDITO_LIQUIDO",
+        )
+        self.assertIsNone(insights["consultivo"]["participacao"])
 
     def test_dashboard_usa_vencimento_das_faturas_intermediarias(self):
         evento = EventoFinanceiro.objects.create(
@@ -1281,6 +1813,235 @@ class DashboardServiceTests(TestCase):
         self.assertEqual(detalhe["linhas"][0].data_original, date(2026, 9, 15))
         self.assertEqual(detalhe["total_indicador"], Decimal("50.00"))
 
+    def test_detalhamento_por_data_da_compra_consolida_valor_integral_sem_repetir_parcelas(self):
+        evento = EventoFinanceiro.objects.create(
+            usuario=self.usuario,
+            natureza=NaturezaEvento.DESPESA,
+            descricao="Compra parcelada integral",
+            data=date(2026, 9, 15),
+            valor=Decimal("300.00"),
+            situacao=Situacao.REALIZADO,
+        )
+        compra = CompraCartao.objects.create(
+            usuario=self.usuario,
+            cartao=self.cartao,
+            evento=evento,
+            estabelecimento="Loja parcelada",
+            data_compra=date(2026, 9, 15),
+            valor_total=Decimal("300.00"),
+            total_parcelas=3,
+        )
+        for numero, ciclo in enumerate(("2026-10", "2026-11", "2026-12"), start=1):
+            fatura = Fatura.objects.create(usuario=self.usuario, cartao=self.cartao, ciclo=ciclo)
+            ParcelaCartao.objects.create(
+                compra=compra,
+                fatura=fatura,
+                natureza=NaturezaEvento.DESPESA,
+                data_original=date(2026, 9, 15),
+                categoria=self.alimentacao,
+                numero=numero,
+                total=3,
+                valor=Decimal("100.00"),
+            )
+
+        detalhe = consultar_detalhamento_dashboard(
+            self.usuario,
+            "category",
+            str(self.alimentacao.pk),
+            date_from="01/09/2026",
+            date_to="30/09/2026",
+            origem="card",
+            analysis_basis="purchase",
+        )
+
+        self.assertEqual(detalhe["analysis_basis"], "purchase")
+        self.assertEqual(detalhe["total_registros"], 1)
+        self.assertEqual(detalhe["linhas"][0].registro_id, compra.pk)
+        self.assertEqual(detalhe["linhas"][0].data_original, date(2026, 9, 15))
+        self.assertEqual(detalhe["linhas"][0].valor, Decimal("300.00"))
+        self.assertIn("Compra no cartão", detalhe["linhas"][0].origem_tipo)
+        self.assertIn("analysis_basis=purchase", detalhe["lancamentos_url"])
+
+        listagem = consultar_lancamentos(
+            self.usuario,
+            origem="CARTAO",
+            data_inicial="01/09/2026",
+            data_final="30/09/2026",
+            categoria_superior=self.alimentacao.pk,
+            computa_resultado="COMPUTA",
+            analysis_type="category",
+            analysis_value=str(self.alimentacao.pk),
+            analysis_basis="purchase",
+            dashboard_context=True,
+        )
+        self.assertEqual(listagem["analysis_basis"], "purchase")
+        self.assertEqual(listagem["total_registros"], 1)
+        self.assertEqual(listagem["linhas"][0].registro_id, compra.pk)
+        self.assertEqual(listagem["linhas"][0].valor, Decimal("300.00"))
+        self.assertIn("analysis_basis=purchase", listagem["filtros_query"])
+
+    def test_detalhamento_de_subcategoria_por_compra_nao_inclui_irma_nem_categoria_superior(self):
+        superior = Categoria.objects.create(usuario=self.usuario, nome="Moradia")
+        energia = Categoria.objects.create(
+            usuario=self.usuario,
+            nome="Energia",
+            categoria_pai=superior,
+        )
+        agua = Categoria.objects.create(
+            usuario=self.usuario,
+            nome="Água",
+            categoria_pai=superior,
+        )
+        evento = EventoFinanceiro.objects.create(
+            usuario=self.usuario,
+            natureza=NaturezaEvento.DESPESA,
+            descricao="Energia parcelada",
+            data=date(2026, 9, 15),
+            valor=Decimal("300.00"),
+            situacao=Situacao.REALIZADO,
+        )
+        compra = CompraCartao.objects.create(
+            usuario=self.usuario,
+            cartao=self.cartao,
+            evento=evento,
+            estabelecimento="Energia solar",
+            data_compra=date(2026, 9, 15),
+            valor_total=Decimal("300.00"),
+            total_parcelas=3,
+        )
+        for numero, ciclo in enumerate(("2026-10", "2026-11", "2026-12"), start=1):
+            fatura = Fatura.objects.create(usuario=self.usuario, cartao=self.cartao, ciclo=ciclo)
+            ParcelaCartao.objects.create(
+                compra=compra,
+                fatura=fatura,
+                natureza=NaturezaEvento.DESPESA,
+                descricao=f"Energia solar {numero}/3",
+                data_original=date(2026, 9, 15),
+                categoria=energia,
+                numero=numero,
+                total=3,
+                valor=Decimal("100.00"),
+                situacao=Situacao.REALIZADO,
+            )
+        self.parcela(
+            "80.00",
+            categoria=agua,
+            ciclo="2026-10",
+            data_compra=date(2026, 9, 16),
+        )
+        self.parcela(
+            "40.00",
+            categoria=superior,
+            ciclo="2026-10",
+            data_compra=date(2026, 9, 17),
+        )
+
+        detalhe = consultar_detalhamento_dashboard(
+            self.usuario,
+            "subcategory",
+            str(energia.pk),
+            date_from="01/09/2026",
+            date_to="30/09/2026",
+            origem="card",
+            analysis_basis="purchase",
+        )
+
+        self.assertEqual(detalhe["titulo_detalhamento"], "Energia")
+        self.assertEqual(detalhe["analysis_type"], "subcategory")
+        self.assertEqual(detalhe["total_registros"], 1)
+        self.assertEqual(detalhe["linhas"][0].registro_id, compra.pk)
+        self.assertEqual(detalhe["linhas"][0].valor, Decimal("300.00"))
+        self.assertEqual(detalhe["total_indicador"], Decimal("300.00"))
+        self.assertIn("analysis_type=subcategory", detalhe["lancamentos_url"])
+        self.assertIn(f"analysis_value={energia.pk}", detalhe["lancamentos_url"])
+        self.assertNotIn("parent_category=", detalhe["lancamentos_url"])
+
+        listagem = consultar_lancamentos(
+            self.usuario,
+            origem="CARTAO",
+            data_inicial="01/09/2026",
+            data_final="30/09/2026",
+            computa_resultado="COMPUTA",
+            analysis_type="subcategory",
+            analysis_value=str(energia.pk),
+            analysis_basis="purchase",
+            dashboard_context=True,
+        )
+        self.assertEqual(listagem["total_registros"], 1)
+        self.assertEqual(listagem["linhas"][0].registro_id, compra.pk)
+        self.assertEqual(listagem["linhas"][0].valor, Decimal("300.00"))
+        self.assertNotIn(agua.pk, listagem["linhas"][0].categoria_ids)
+        self.assertNotIn(superior.pk, listagem["linhas"][0].categoria_ids)
+
+    def test_listagem_analitica_preserva_a_classificar_ja_filtrado_no_detalhamento(self):
+        movimento = self.movimento("-75.00", categoria=None)
+
+        listagem = consultar_lancamentos(
+            self.usuario,
+            origem="CONTA",
+            data_inicial="01/10/2026",
+            data_final="31/10/2026",
+            computa_resultado="COMPUTA",
+            analysis_type="category",
+            analysis_value="unclassified",
+            dashboard_context=True,
+        )
+
+        self.assertEqual(listagem["total_registros"], 1)
+        self.assertEqual(listagem["linhas"][0].registro_id, movimento.pk)
+        self.assertEqual(listagem["linhas"][0].categoria, "A classificar")
+        self.assertEqual(listagem["total_indicador"], Decimal("75.00"))
+
+    def test_estorno_por_data_da_compra_mantem_natureza_e_totalizacao_de_credito(self):
+        evento = EventoFinanceiro.objects.create(
+            usuario=self.usuario,
+            natureza=NaturezaEvento.ESTORNO,
+            descricao="Estorno da compra",
+            data=date(2026, 9, 20),
+            valor=Decimal("50.00"),
+            situacao=Situacao.REALIZADO,
+        )
+        compra = CompraCartao.objects.create(
+            usuario=self.usuario,
+            cartao=self.cartao,
+            evento=evento,
+            estabelecimento="Loja estornada",
+            data_compra=date(2026, 9, 20),
+            valor_total=Decimal("50.00"),
+            total_parcelas=1,
+        )
+        fatura = Fatura.objects.create(usuario=self.usuario, cartao=self.cartao, ciclo="2026-10")
+        ParcelaCartao.objects.create(
+            compra=compra,
+            fatura=fatura,
+            natureza=NaturezaEvento.ESTORNO,
+            data_original=date(2026, 9, 20),
+            categoria=self.alimentacao,
+            numero=1,
+            total=1,
+            valor=Decimal("50.00"),
+        )
+
+        listagem = consultar_lancamentos(
+            self.usuario,
+            origem="CARTAO",
+            data_inicial="01/09/2026",
+            data_final="30/09/2026",
+            computa_resultado="COMPUTA",
+            analysis_type="category",
+            analysis_value=str(self.alimentacao.pk),
+            analysis_basis="purchase",
+            dashboard_context=True,
+        )
+
+        self.assertEqual(listagem["total_registros"], 1)
+        self.assertEqual(listagem["linhas"][0].valor, Decimal("-50.00"))
+        self.assertEqual(listagem["linhas"][0].natureza_valor, NaturezaEvento.ESTORNO)
+        self.assertIn("Compra no cartão", listagem["linhas"][0].origem_tipo)
+        self.assertIn("Estorno", listagem["linhas"][0].origem_tipo)
+        self.assertEqual(listagem["total_creditos"], Decimal("50.00"))
+        self.assertEqual(listagem["total_debitos"], Decimal("0.00"))
+
     def test_detalhamento_ordena_compras_por_data_original_e_id_do_lancamento(self):
         primeira = self.parcela(
             "10.00",
@@ -1905,6 +2666,275 @@ class LancamentoDashboardTests(TestCase):
         self.assertContains(formulario, 'data-lancamento-form')
         self.assertContains(formulario, 'name="origem"')
 
+    def test_dashboard_renderiza_seletor_base_e_matriz_mensal_por_categoria(self):
+        for mes in range(5, 11):
+            criar_lancamento(
+                self.usuario,
+                self.dados(data=date(2026, mes, 10), valor=Decimal(f"{mes * 10}.00")),
+            )
+        subcategoria = Categoria.objects.create(
+            usuario=self.usuario,
+            nome="Feira",
+            categoria_pai=self.categoria,
+        )
+        criar_lancamento(
+            self.usuario,
+            self.dados(
+                descricao="Compra na feira",
+                data=date(2026, 10, 11),
+                valor=Decimal("25.00"),
+                categoria=subcategoria,
+            ),
+        )
+        outro_superior = Categoria.objects.create(usuario=self.usuario, nome="Transporte")
+        outra_subcategoria = Categoria.objects.create(
+            usuario=self.usuario,
+            nome="Combustível",
+            categoria_pai=outro_superior,
+        )
+        criar_lancamento(
+            self.usuario,
+            self.dados(
+                descricao="Abastecimento",
+                data=date(2026, 10, 12),
+                valor=Decimal("15.00"),
+                categoria=outra_subcategoria,
+            ),
+        )
+
+        resposta = self.client.get(
+            reverse("dashboard"),
+            {
+                "date_from": "01/10/2026",
+                "date_to": "15/10/2026",
+                "analysis_basis": "purchase",
+                "origin": "account",
+                "nature": "personal",
+            },
+        )
+        conteudo = resposta.content.decode()
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, 'id="analysisBasisFilter"')
+        self.assertContains(resposta, 'name="analysis_basis"')
+        self.assertContains(resposta, '<input type="hidden" name="origin" value="account">')
+        self.assertContains(resposta, '<input type="hidden" name="nature" value="personal">')
+        self.assertContains(resposta, '<option value="purchase" selected>Data da compra — valor integral</option>')
+        self.assertContains(resposta, "my-financeiro.dashboard.analysis-basis")
+        self.assertContains(
+            resposta,
+            "new URLSearchParams(window.location.search).has('analysis_basis')",
+        )
+        self.assertContains(resposta, "validAnalysisBases.has(storedAnalysisBasis)")
+        self.assertContains(resposta, "analysisBasisFilter.value = storedAnalysisBasis")
+        self.assertContains(
+            resposta,
+            "window.localStorage.setItem(analysisBasisStorageKey, analysisBasisFilter.value)",
+        )
+        self.assertContains(resposta, '<option value="account" selected>Conta</option>')
+        self.assertContains(resposta, '<option value="personal" selected>Pessoal</option>')
+        self.assertContains(resposta, "Evolução do consumo")
+        self.assertContains(resposta, "Receitas versus gastos assumidos")
+        self.assertContains(resposta, "Gastos mensais por categoria")
+        self.assertContains(resposta, ".overview-section.monthly-category-panel{margin-top:22px}")
+        self.assertContains(resposta, ".monthly-category-value-cell{padding:0!important}")
+        self.assertContains(
+            resposta,
+            ".monthly-category-panel .monthly-category-table *",
+        )
+        self.assertContains(
+            resposta,
+            ".monthly-category-panel .monthly-category-insights *",
+        )
+        self.assertContains(
+            resposta,
+            ".monthly-category-panel .monthly-category-legend *{font-weight:400}",
+        )
+        self.assertContains(resposta, "@media (prefers-reduced-motion:reduce)")
+        self.assertContains(resposta, "Total computável")
+        self.assertContains(resposta, "Compõe o resultado")
+        self.assertContains(resposta, "Total consultivo")
+        self.assertContains(resposta, "Total analisado")
+        self.assertContains(resposta, "Computável + consultivo")
+        self.assertContains(resposta, "Comparação dos últimos 12 meses completos")
+        self.assertContains(
+            resposta,
+            'class="monthly-category-insights" aria-labelledby="monthlyCategoryInsightsTitle"',
+        )
+        self.assertContains(resposta, 'id="monthlyCategoryInsightsTitle">Leitura do último mês</h3>')
+        self.assertContains(resposta, "09/2026 → 10/2026")
+        self.assertContains(resposta, "Maiores aumentos")
+        self.assertContains(resposta, "Maiores reduções")
+        self.assertContains(resposta, 'aria-label="Legenda das variações mensais"')
+        self.assertContains(resposta, "Aumento de gasto")
+        self.assertContains(resposta, "Redução de gasto")
+        self.assertNotContains(resposta, "Sem base comparativa")
+        self.assertNotContains(resposta, "Sem base ou movimento")
+        self.assertContains(resposta, "Consultivo, sem impacto no resultado")
+        self.assertContains(
+            resposta,
+            ".monthly-category-variation.state-sem_movimento{display:none}",
+        )
+        self.assertContains(
+            resposta,
+            ".monthly-category-variation.state-sem_base{display:none}",
+        )
+        self.assertContains(resposta, 'class="monthly-category-variation')
+        self.assertContains(resposta, 'class="monthly-category-visually-hidden"')
+        self.assertContains(resposta, 'class="monthly-category-variation-icon" aria-hidden="true"')
+        self.assertContains(resposta, 'class="monthly-category-total-value"')
+        self.assertContains(resposta, 'class="monthly-category-total-computable"')
+        self.assertContains(resposta, 'class="monthly-category-total-consultive"')
+        self.assertContains(resposta, 'class="monthly-category-total-analyzed"')
+        self.assertContains(resposta, 'role="region" aria-label="Gastos mensais por categoria')
+        self.assertContains(
+            resposta,
+            '<caption class="monthly-category-visually-hidden">Gastos mensais por categoria nos '
+            'últimos 12 meses, com variação em relação ao mês anterior.</caption>',
+        )
+        self.assertContains(
+            resposta,
+            ".monthly-category-table th:first-child{position:sticky;left:0",
+        )
+        self.assertContains(
+            resposta,
+            ".monthly-category-table{min-width:1400px;table-layout:fixed}",
+        )
+        self.assertContains(
+            resposta,
+            ".monthly-category-table th:first-child,.monthly-category-table td:first-child{width:190px;min-width:190px;max-width:190px}",
+        )
+        self.assertContains(
+            resposta,
+            ".monthly-category-table th:not(:first-child):not(:last-child){width:92px}",
+        )
+        self.assertContains(
+            resposta,
+            ".monthly-category-table th:not(:first-child),.monthly-category-table td:not(:first-child){padding-left:6px;padding-right:6px}",
+        )
+        self.assertContains(resposta, ".monthly-category-table{min-width:1350px}")
+        self.assertContains(resposta, ".monthly-category-table{min-width:1280px}")
+        self.assertContains(
+            resposta,
+            ".monthly-category-table th:first-child,.monthly-category-table td:first-child{width:170px;min-width:170px;max-width:170px}",
+        )
+        self.assertContains(resposta, "analysis_basis=purchase")
+        self.assertGreaterEqual(conteudo.count('class="monthly-category-link'), 6)
+        self.assertContains(resposta, "analysis_type=category")
+        self.assertContains(resposta, 'class="monthly-category-toggle"', count=2)
+        self.assertContains(resposta, 'aria-expanded="false"')
+        identificador_subcategorias = f"monthly-category-subcategories-computa-{self.categoria.pk}"
+        identificador_outras_subcategorias = (
+            f"monthly-category-subcategories-computa-{outro_superior.pk}"
+        )
+        self.assertContains(resposta, f'aria-controls="{identificador_subcategorias}"')
+        self.assertContains(resposta, f'aria-controls="{identificador_outras_subcategorias}"')
+        self.assertContains(
+            resposta,
+            f'<tbody class="monthly-category-subcategories" id="{identificador_subcategorias}" hidden>',
+        )
+        self.assertContains(
+            resposta,
+            f'<tbody class="monthly-category-subcategories" '
+            f'id="{identificador_outras_subcategorias}" hidden>',
+        )
+        self.assertContains(resposta, 'class="monthly-category-subcategory"')
+        self.assertContains(resposta, 'aria-label="Expandir subcategorias de Mercado"')
+        self.assertContains(resposta, "Direto na categoria")
+        self.assertContains(resposta, "Feira")
+        self.assertContains(resposta, "analysis_type=subcategory")
+        self.assertContains(resposta, f"analysis_value={subcategoria.pk}")
+        self.assertContains(resposta, f"&amp;category={subcategoria.pk}")
+        self.assertContains(resposta, "subcategories.hidden = !expanded")
+        self.assertContains(
+            resposta,
+            "event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey",
+        )
+        self.assertContains(resposta, "date_from=01%2F10%2F2026")
+        self.assertRegex(conteudo, r"date_to=31(?:%2F|/)10(?:%2F|/)2026")
+        self.assertEqual(len(resposta.context["gastos_mensais_categoria"]["meses"]), 12)
+        self.assertEqual(len(resposta.context["evolucao"]), 6)
+        categoria = next(
+            item
+            for item in resposta.context["gastos_mensais_categoria"]["categorias"]
+            if item["categoria_id"] == self.categoria.pk
+        )
+        self.assertTrue(categoria["expansivel"])
+        self.assertEqual(
+            [item["nome"] for item in categoria["subcategorias"]],
+            ["Direto na categoria", "Feira"],
+        )
+        rotulos_esperados = [
+            "11/2025",
+            "12/2025",
+            "01/2026",
+            "02/2026",
+            "03/2026",
+            "04/2026",
+            "05/2026",
+            "06/2026",
+            "07/2026",
+            "08/2026",
+            "09/2026",
+            "10/2026",
+        ]
+        self.assertEqual(
+            [item["rotulo"] for item in resposta.context["gastos_mensais_categoria"]["meses"]],
+            rotulos_esperados,
+        )
+        self.assertEqual(
+            resposta.context["gastos_mensais_categoria"]["meses"][-1]["data_final"],
+            date(2026, 10, 31),
+        )
+        inicio_matriz = conteudo.index(
+            'class="panel full overview-section collapsible-panel monthly-category-panel"'
+        )
+        fim_matriz = conteudo.index('id="comparisonTitle"', inicio_matriz)
+        trecho_matriz = conteudo[inicio_matriz:fim_matriz]
+        inicio_cabecalho = trecho_matriz.index("<thead>")
+        fim_cabecalho = trecho_matriz.index("</thead>", inicio_cabecalho)
+        trecho_cabecalho = trecho_matriz[inicio_cabecalho:fim_cabecalho]
+        self.assertEqual(trecho_cabecalho.count('scope="col"'), 14)
+        for rotulo in rotulos_esperados:
+            self.assertIn(f">{rotulo}</th>", trecho_cabecalho)
+        inicio_link = trecho_matriz.index('class="monthly-category-link')
+        fim_link = trecho_matriz.index("</a>", inicio_link)
+        trecho_link = trecho_matriz[inicio_link:fim_link]
+        self.assertIn("monthly-category-variation", trecho_link)
+        self.assertIn("monthly-category-visually-hidden", trecho_link)
+        inicio_subcategorias = trecho_matriz.index(
+            f'<tbody class="monthly-category-subcategories" id="{identificador_subcategorias}"'
+        )
+        fim_subcategorias = trecho_matriz.index("</tbody>", inicio_subcategorias)
+        trecho_subcategorias = trecho_matriz[inicio_subcategorias:fim_subcategorias]
+        self.assertIn("analysis_type=subcategory", trecho_subcategorias)
+        self.assertIn("monthly-category-variation", trecho_subcategorias)
+        inicio_total_analisado = trecho_matriz.index(
+            '<tr class="monthly-category-total-analyzed">'
+        )
+        fim_total_analisado = trecho_matriz.index("</tr>", inicio_total_analisado)
+        trecho_total_analisado = trecho_matriz[
+            inicio_total_analisado:fim_total_analisado
+        ]
+        self.assertIn("monthly-category-variation", trecho_total_analisado)
+        self.assertNotRegex(
+            trecho_matriz,
+            r'aria-label="[^"]*(?:R\$|[-−]?\d+(?:[,.]\d+)?%)',
+        )
+        self.assertNotRegex(trecho_matriz, r"[+−-]?\d+\.\d{2}%")
+        self.assertRegex(trecho_matriz, r"[+−-]?\d+,\d{2}%")
+        self.assertNotIn("aria-live=", trecho_matriz)
+        self.assertContains(
+            resposta,
+            "O orçamento acompanha lançamentos da conta e parcelas mensais do cartão",
+        )
+        self.assertNotContains(
+            resposta,
+            'class="panel full overview-section collapsible-panel monthly-category-panel" open',
+        )
+        self.assertLess(conteudo.index('id="evolutionTitle"'), conteudo.index('id="monthlyCategoryTitle"'))
+        self.assertLess(conteudo.index('id="monthlyCategoryTitle"'), conteudo.index('id="comparisonTitle"'))
+
     def test_dashboard_renderiza_comparativo_acima_do_simulador(self):
         criar_lancamento(self.usuario, self.dados())
 
@@ -1970,6 +3000,7 @@ class LancamentoDashboardTests(TestCase):
         criar_lancamento(self.usuario, self.dados(categoria=aplicacoes))
 
         resposta = self.client.get(reverse("dashboard"), {"period": "2026-10"})
+        conteudo = resposta.content.decode()
 
         self.assertContains(resposta, 'role="tablist"')
         self.assertContains(resposta, 'id="categoryTabComputa"')
@@ -1980,7 +3011,19 @@ class LancamentoDashboardTests(TestCase):
         self.assertContains(resposta, "Não compõe no resultado")
         self.assertContains(resposta, "Ver lançamentos que não compõem a categoria Investimentos")
         self.assertContains(resposta, "Investimentos")
-        self.assertContains(resposta, "computes=NAO_COMPUTA", count=2)
+        self.assertContains(
+            resposta,
+            '<span class="monthly-category-row-label"><span>Investimentos</span><small>Não compõe no resultado</small></span>',
+            html=True,
+        )
+        marcador = 'aria-label="Ver lançamentos que não compõem a categoria Investimentos"'
+        indice_marcador = conteudo.index(marcador)
+        inicio_link = conteudo.rfind("<a", 0, indice_marcador)
+        fim_link = conteudo.index("</a>", indice_marcador)
+        self.assertEqual(
+            conteudo[inicio_link:fim_link].count("computes=NAO_COMPUTA"),
+            2,
+        )
         self.assertContains(resposta, "ArrowRight")
         self.assertContains(resposta, "ArrowLeft")
 
@@ -2032,7 +3075,65 @@ class LancamentoDashboardTests(TestCase):
         self.assertContains(resposta, 'aria-label="Ocultar valores"')
         self.assertContains(resposta, "my-financeiro.dashboard.values-hidden")
         self.assertContains(resposta, "data-sensitive-value")
+        self.assertContains(resposta, "sensitiveValuePattern")
+        self.assertContains(resposta, "maskSensitiveText(scope)")
         self.assertContains(resposta, "Valor oculto")
+
+    def test_dashboard_renderiza_paineis_recolhiveis_com_persistencia_local(self):
+        resposta = self.client.get(reverse("dashboard"), {"period": "2026-10"})
+        conteudo = resposta.content.decode()
+        paineis_esperados = [
+            "accounts",
+            "cards",
+            "cash-flow",
+            "budget",
+            "expense-composition",
+            "controllable-expenses",
+            "expenses-by-category",
+            "nature-distribution",
+            "commitments",
+            "attention",
+            "evolution",
+            "monthly-category",
+            "comparison",
+            "coverage",
+            "simulator",
+        ]
+        paineis_fechados = {"monthly-category", "comparison", "coverage", "simulator"}
+        tags_details = re.findall(
+            r'<details\b([^>]*)data-dashboard-panel-id="([^"]+)"([^>]*)>',
+            conteudo,
+        )
+        estados = {
+            identificador: bool(re.search(r"\bopen\b", f"{antes} {depois}"))
+            for antes, identificador, depois in tags_details
+        }
+
+        self.assertEqual(list(estados), paineis_esperados)
+        self.assertEqual(len(estados), 15)
+        self.assertEqual(
+            {identificador for identificador, aberto in estados.items() if not aberto},
+            paineis_fechados,
+        )
+        self.assertContains(resposta, "my-financeiro.dashboard.panels-open")
+        self.assertContains(resposta, ".overview-grid>.collapsible-panel{min-width:0}")
+        self.assertContains(
+            resposta,
+            '.overview-section[data-dashboard-panel-id="evolution"]{margin-top:22px}',
+        )
+        self.assertContains(resposta, "JSON.parse(window.localStorage.getItem(panelsStorageKey) || '{}')")
+        self.assertContains(resposta, "typeof storedPanelStates[panelId] === 'boolean'")
+        self.assertContains(resposta, "Object.fromEntries(dashboardPanels.map")
+        self.assertContains(resposta, "window.localStorage.setItem(panelsStorageKey")
+        self.assertContains(resposta, "panel.addEventListener('toggle'")
+        self.assertContains(resposta, "budgetOverviewPanel.style.removeProperty('height')")
+        self.assertLess(conteudo.index('id="accountsTitle"'), conteudo.index('id="cardsTitle"'))
+        self.assertLess(conteudo.index('id="cardsTitle"'), conteudo.index('id="cashFlowTitle"'))
+        self.assertLess(conteudo.index('id="cashFlowTitle"'), conteudo.index('id="budgetTitle"'))
+        self.assertLess(
+            conteudo.index('id="budgetTitle"'),
+            conteudo.index('id="expenseCompositionTitle"'),
+        )
 
     def test_dashboard_renderiza_orcamento_fixo_ao_lado_do_fluxo(self):
         Orcamento.objects.create(
@@ -2046,14 +3147,16 @@ class LancamentoDashboardTests(TestCase):
 
         resposta = self.client.get(reverse("dashboard"), {"period": "2026-10"})
         conteudo = resposta.content.decode()
-        inicio_orcamento = conteudo.index('<article class="panel budget-panel"')
-        fim_orcamento = conteudo.index("</article>", inicio_orcamento)
+        inicio_orcamento = conteudo.index('<details class="panel collapsible-panel budget-panel"')
+        fim_orcamento = conteudo.index("</details>", inicio_orcamento)
         trecho_orcamento = conteudo[inicio_orcamento:fim_orcamento]
 
         self.assertContains(resposta, 'aria-label="Fluxo de caixa e orçamento"')
-        self.assertContains(resposta, 'class="panel budget-panel"')
+        self.assertContains(resposta, 'class="panel collapsible-panel budget-panel" open')
         self.assertContains(resposta, "data-cash-flow-panel")
         self.assertContains(resposta, "data-budget-overview-panel")
+        self.assertContains(resposta, 'data-dashboard-panel-id="cash-flow"')
+        self.assertContains(resposta, 'data-dashboard-panel-id="budget"')
         self.assertContains(resposta, "Orçamento <span class=\"collapsible-summary-meta\">Total ·")
         self.assertContains(resposta, "10/2026")
         self.assertContains(resposta, "R$ 100,00")
@@ -2068,7 +3171,8 @@ class LancamentoDashboardTests(TestCase):
         self.assertNotContains(resposta, ">Orçado ")
         self.assertNotIn("<strong", trecho_orcamento)
         self.assertEqual(trecho_orcamento.count('role="progressbar"'), 1)
-        self.assertContains(resposta, ".budget-panel h2,.budget-panel h2 *,.budget-item,.budget-item *{font-weight:400}")
+        self.assertContains(resposta, ".budget-item,.budget-item *{font-weight:400}")
+        self.assertNotContains(resposta, ".budget-panel h2,.budget-panel h2 *")
         self.assertContains(resposta, ".budget-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))")
         self.assertContains(resposta, ".commitment-cards,.cash-grid,.budget-list{grid-template-columns:1fr}")
         self.assertContains(resposta, "overflow-y:auto")
@@ -2076,9 +3180,10 @@ class LancamentoDashboardTests(TestCase):
         self.assertContains(resposta, ".overview-section.simulator-panel{margin-top:22px}")
         self.assertNotContains(resposta, "data-budget-panel")
         self.assertNotContains(resposta, "my-financeiro.dashboard.budget-open")
-        self.assertNotContains(resposta, 'title="Abrir ou fechar o indicador de orçamento"')
+        self.assertContains(resposta, 'title="Abrir ou fechar orçamento"')
+        self.assertContains(resposta, "if (!cashFlowPanel.open || !budgetOverviewPanel.open)")
         self.assertContains(resposta, "Orçamento próximo do limite")
-        self.assertLess(conteudo.index(">Fluxo de caixa</h2>"), conteudo.index('id="budgetTitle"'))
+        self.assertLess(conteudo.index('id="cashFlowTitle"'), conteudo.index('id="budgetTitle"'))
         self.assertEqual(resposta.context["pontos_atencao"][0]["tipo"], "orcamento")
 
         resposta_sem_orcamento = self.client.get(reverse("dashboard"), {"period": "2026-11"})

@@ -20,6 +20,7 @@ CLONAGEM_COMPLETA = "completa"
 CLONAGEM_PARCIAL = "parcial"
 IMPORTACAO_COMPLETA = "completa"
 IMPORTACAO_PARCIAL = "parcial"
+BASE_ANALISE_ORCAMENTO = "competence"
 
 
 class ClonagemPeriodoOrcamentoInvalida(ValueError):
@@ -149,6 +150,7 @@ def _consolidar_realizados(
         usuario,
         date_from=data_inicial,
         date_to=data_final,
+        analysis_basis=BASE_ANALISE_ORCAMENTO,
         aplicar_composicao_dashboard=dashboard_context,
     )
     realizados = defaultdict(lambda: ZERO)
@@ -336,6 +338,7 @@ def _urls_detalhamento_categoria(
         "account": "all",
         "card": "all",
         "origin": "all",
+        "analysis_basis": BASE_ANALISE_ORCAMENTO,
     }
     detalhe = {
         **base,
