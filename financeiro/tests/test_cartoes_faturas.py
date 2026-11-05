@@ -528,6 +528,12 @@ class CartoesFaturasViewTests(TestCase):
         resposta = self.abrir_painel(fatura)
 
         self.assertContains(resposta, "Há 1 previsão(ões) pendente(s)")
+        self.assertContains(resposta, "<th>Situação</th>", html=True)
+        self.assertContains(resposta, 'class="panel full invoice-items collapsible-panel" open')
+        self.assertContains(resposta, 'class="invoice-item-pending"', count=1)
+        self.assertContains(resposta, 'class="invoice-status is-pending"', count=1)
+        self.assertContains(resposta, "Previsto")
+        self.assertContains(resposta, "Pendência de fechamento")
         self.assertNotContains(resposta, 'data-modal-title="Conferir e fechar fatura"')
 
     def test_fatura_fechada_exibe_acoes_de_pagamento_e_reabertura(self):

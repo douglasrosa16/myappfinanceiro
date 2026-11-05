@@ -248,6 +248,8 @@ def consultar_cartoes_faturas(usuario, ciclo=None, conta_id=None, cartao_id=None
                 "descricao": parcela.descricao_exibicao,
                 "cartao": parcela.fatura.cartao,
                 "marcador": f"{parcela.numero}/{parcela.total}" if parcela.total > 1 else "—",
+                "situacao": parcela.get_situacao_display(),
+                "bloqueia_fechamento": parcela.situacao in {Situacao.PREVISTO, Situacao.PENDENTE},
                 "valor_assinado": _valor_assinado(parcela),
             }
         )
