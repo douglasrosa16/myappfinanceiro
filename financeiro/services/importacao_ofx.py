@@ -130,6 +130,45 @@ def _categorias_evento(evento: EventoFinanceiro | None) -> list[dict]:
     ]
 
 
+def _categoria_id_unica_evento(evento: EventoFinanceiro | None) -> int | None:
+    categorias = _categorias_evento(evento)
+    return categorias[0]["id"] if len(categorias) == 1 else None
+
+
+def _categoria_id_parcela(parcela: ParcelaCartao | None) -> int | None:
+    if not parcela:
+        return None
+    if parcela.categoria_id:
+        return parcela.categoria_id
+    return _categoria_id_unica_evento(parcela.compra.evento)
+
+
+def _categoria_id_unica_titulos(titulos: list[Titulo]) -> int | None:
+    categorias = [_categoria_id_unica_evento(titulo.evento) for titulo in titulos]
+    if not categorias or any(categoria_id is None for categoria_id in categorias):
+        return None
+    categorias_unicas = set(categorias)
+    return categorias_unicas.pop() if len(categorias_unicas) == 1 else None
+
+
+def _sincronizar_categoria_vinculo(
+    item: ItemImportacao,
+    *,
+    titulos: list[Titulo] | None = None,
+) -> None:
+    """Mantém a categoria da revisão como reflexo do destino vinculado."""
+    if titulos is not None:
+        item.categoria_id = _categoria_id_unica_titulos(titulos)
+    elif item.parcela_id:
+        item.categoria_id = _categoria_id_parcela(item.parcela)
+    elif item.movimento_conta_id:
+        item.categoria_id = _categoria_id_unica_evento(item.movimento_conta.evento)
+    elif item.titulo_alvo_id:
+        item.categoria_id = _categoria_id_unica_evento(item.titulo_alvo.evento)
+    else:
+        item.categoria_id = _categoria_id_unica_evento(item.evento)
+
+
 def _pontuacao_candidato(item: ItemImportacao, data_candidato, valor: Decimal, evento=None) -> tuple[int, list[str]]:
     pontos = 0
     motivos = []
@@ -269,6 +308,7 @@ def buscar_candidatos_vinculo(
                 "conta": titulo.conta.nome if titulo.conta_id else "Conta não definida",
                 "natureza": evento.get_natureza_display() if evento else titulo.get_tipo_display(),
                 "categoria": ", ".join(categoria["nome"] for categoria in categorias) or "A classificar",
+                "categoria_id": categorias[0]["id"] if len(categorias) == 1 else None,
                 "pessoa": pessoa or "Pessoa não informada",
                 "pontuacao": pontos,
                 "motivos": motivos,
@@ -318,6 +358,7 @@ def buscar_candidatos_vinculo(
                 "conta": movimento.conta.nome,
                 "natureza": evento.get_natureza_display(),
                 "categoria": ", ".join(categoria["nome"] for categoria in categorias) or "A classificar",
+                "categoria_id": categorias[0]["id"] if len(categorias) == 1 else None,
                 "pessoa": pessoa or "Pessoa não informada",
                 "pontuacao": pontos,
                 "motivos": motivos,
@@ -339,9 +380,11 @@ def buscar_candidatos_vinculo(
                 continue
             evento = parcela.compra.evento
             categoria = parcela.categoria.nome if parcela.categoria_id else ""
+            categoria_id = parcela.categoria_id
             if not categoria:
                 categorias_evento = _categorias_evento(evento)
                 categoria = ", ".join(item_categoria["nome"] for item_categoria in categorias_evento)
+                categoria_id = categorias_evento[0]["id"] if len(categorias_evento) == 1 else None
             pessoa = (
                 parcela.pessoa.nome
                 if parcela.pessoa_id
@@ -377,6 +420,7 @@ def buscar_candidatos_vinculo(
                 "conta": f"{parcela.fatura.cartao.nome} · {parcela.fatura.ciclo}",
                 "natureza": parcela.get_natureza_display() if parcela.natureza else evento.get_natureza_display(),
                 "categoria": categoria or "A classificar",
+                "categoria_id": categoria_id,
                 "pessoa": pessoa or "Pessoa não informada",
                 "pontuacao": pontos,
                 "motivos": motivos,
@@ -736,6 +780,7 @@ def _conciliar_item(item: ItemImportacao) -> None:
             item.evento = anterior.evento
             item.movimento_conta = anterior.movimento_conta
             item.parcela = anterior.parcela
+            _sincronizar_categoria_vinculo(item)
             item.motivo_status = "O identificador já existe, mas data ou valor foi alterado."
         return
     if len(anteriores) > 1:
@@ -757,7 +802,7 @@ def _vincular_existente(item: ItemImportacao, anterior: ItemImportacao) -> None:
     item.titulo_alvo = anterior.titulo_alvo
     item.parcela = anterior.parcela
     item.evidencia_liquidacao = anterior.evidencia_liquidacao
-    item.categoria = anterior.categoria
+    _sincronizar_categoria_vinculo(item)
     item.pessoa = anterior.pessoa
     item.ambito = anterior.ambito
     item.observacao = anterior.observacao
@@ -857,6 +902,7 @@ def sugerir_vinculo_confiavel(item: ItemImportacao) -> None:
             item.parcela = destino
             item.evento = destino.compra.evento
             descricao = "parcela"
+        _sincronizar_categoria_vinculo(item)
         _adicionar_motivo(
             item,
             f"Sugestão automática: único {descricao} compatível por data e valor; confirme o vínculo na revisão.",
@@ -889,6 +935,7 @@ def _conciliar_evento_pagamento(item: ItemImportacao) -> bool:
         item.acao = ItemImportacao.Acao.VINCULAR
         item.evento = evento
         item.movimento_conta = evento.movimentos_conta.first()
+        _sincronizar_categoria_vinculo(item)
         item.motivo_status = "Pagamento de fatura conciliado com a evidência já existente."
         return True
     if candidatos.count() > 1:
@@ -991,6 +1038,7 @@ def selecionar_vinculo_item(
         if (destinos_informados == destinos_atuais and titulos_ids == titulos_atuais) or (
             not any(destinos_informados) and not titulos_ids and not any(destinos_atuais) and not titulos_atuais
         ):
+            _sincronizar_categoria_vinculo(item)
             return item
         raise ValidationError("O item já está conciliado e seu destino não pode ser alterado.")
 
@@ -1003,6 +1051,7 @@ def selecionar_vinculo_item(
         item.parcela = None
         item._titulos_multiplos_ids = []
         item._remover_vinculo = True
+        item.categoria = None
         item.status = ItemImportacao.Status.PENDENTE
         item.motivo_status = "Vínculo removido; selecione outro destino ou altere a ação."
         return item
@@ -1035,6 +1084,7 @@ def selecionar_vinculo_item(
             item.status = ItemImportacao.Status.CONCILIADO
             item.motivo_status = "Títulos selecionados manualmente; as baixas serão realizadas na confirmação."
             item._titulos_multiplos_ids = [titulo.pk for titulo in titulos]
+            _sincronizar_categoria_vinculo(item, titulos=titulos)
             return item
     if titulo_id:
         titulo = Titulo.objects.select_related("conta", "evento").filter(pk=titulo_id, usuario=usuario).first()
@@ -1048,6 +1098,7 @@ def selecionar_vinculo_item(
         item._titulos_multiplos_ids = []
         item.status = ItemImportacao.Status.CONCILIADO
         item.motivo_status = "Título selecionado manualmente; a baixa será realizada na confirmação."
+        _sincronizar_categoria_vinculo(item)
         return item
 
     movimento = MovimentoConta.objects.select_related("conta", "evento").filter(pk=movimento_id).first()
@@ -1062,6 +1113,7 @@ def selecionar_vinculo_item(
         item._titulos_multiplos_ids = []
         item.status = ItemImportacao.Status.CONCILIADO
         item.motivo_status = "Movimento existente selecionado manualmente."
+        _sincronizar_categoria_vinculo(item)
         return item
 
     parcela = (
@@ -1079,6 +1131,7 @@ def selecionar_vinculo_item(
     item._titulos_multiplos_ids = []
     item.status = ItemImportacao.Status.CONCILIADO
     item.motivo_status = "Parcela prevista selecionada manualmente; a realização ocorrerá na confirmação."
+    _sincronizar_categoria_vinculo(item)
     return item
 
 

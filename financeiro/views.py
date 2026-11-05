@@ -1777,7 +1777,7 @@ def importacao_revisao(request, pk):
         "busca": busca,
         "status_filtro": status,
         "revisao_filtro": revisao,
-        "categorias": Categoria.objects.filter(usuario=request.user, ativa=True).select_related("categoria_pai"),
+        "categorias": Categoria.objects.filter(usuario=request.user).select_related("categoria_pai"),
         "pessoas": Pessoa.objects.filter(usuario=request.user, ativa=True),
         "naturezas": EventoFinanceiro._meta.get_field("natureza").choices,
         "ambitos": EventoFinanceiro._meta.get_field("ambito").choices,
