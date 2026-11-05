@@ -27,6 +27,12 @@ from financeiro.vencimentos_cartao import resolver_vencimento_fatura
 
 ZERO = Decimal("0.00")
 STATUS_FATURA_BLOQUEADA = {Fatura.Status.FECHADA, Fatura.Status.PAGA}
+ROTULOS_SITUACAO_ITEM = {
+    Situacao.REALIZADO: "Confirmado",
+    Situacao.PREVISTO: "Previsto",
+    Situacao.PENDENTE: "Pendente",
+    Situacao.CANCELADO: "Cancelado",
+}
 
 
 def rotulo_ciclo(ciclo: str) -> str:
@@ -248,7 +254,7 @@ def consultar_cartoes_faturas(usuario, ciclo=None, conta_id=None, cartao_id=None
                 "descricao": parcela.descricao_exibicao,
                 "cartao": parcela.fatura.cartao,
                 "marcador": f"{parcela.numero}/{parcela.total}" if parcela.total > 1 else "—",
-                "situacao": parcela.get_situacao_display(),
+                "situacao": ROTULOS_SITUACAO_ITEM.get(parcela.situacao, parcela.get_situacao_display()),
                 "bloqueia_fechamento": parcela.situacao in {Situacao.PREVISTO, Situacao.PENDENTE},
                 "valor_assinado": _valor_assinado(parcela),
             }

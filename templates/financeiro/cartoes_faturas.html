@@ -26,9 +26,12 @@
   .invoice-items .item-description{min-width:300px}
   .invoice-item-pending{background:#fffbeb}
   .invoice-item-pending td:first-child{box-shadow:inset 4px 0 0 #d97706}
-  .invoice-status{display:inline-flex;align-items:center;border-radius:999px;padding:3px 9px;background:#f1f5f9;color:#475569;font-size:12px;font-weight:700;white-space:nowrap}
-  .invoice-status.is-pending{background:#fef3c7;color:#92400e}
-  .invoice-status-note{display:block;margin-top:4px;color:#92400e;font-size:12px;font-weight:600;white-space:nowrap}
+  .invoice-status{display:inline-flex;align-items:center;border-radius:999px;padding:3px 9px;font-size:12px;font-weight:400;white-space:nowrap}
+  .invoice-status.status-previsto{background:#edf5ff;color:#0757a8}
+  .invoice-status.status-pendente{background:#fff1d6;color:#8a5a00}
+  .invoice-status.status-realizado{background:#e6f6f0;color:#007c64}
+  .invoice-status.status-cancelado{background:#fff0f2;color:#a62f42}
+  .invoice-status-note{display:block;margin-top:4px;color:#92400e;font-size:12px;font-weight:400;white-space:nowrap}
   .invoice-empty{text-align:center;color:var(--muted);padding:28px}
   .invoice-action-disabled{font-size:14px;color:var(--muted)}
   .invoice-closing{margin-top:22px}
@@ -167,7 +170,7 @@
               <td>{{ item.cartao.nome }}{% if not item.cartao.ativo %} (inativo){% endif %}</td>
               <td>{{ item.marcador }}</td>
               <td>
-                <span class="invoice-status{% if painel and item.parcela.fatura_id == painel.fatura.pk and item.bloqueia_fechamento %} is-pending{% endif %}">{{ item.situacao }}</span>
+                <span class="invoice-status status-{{ item.parcela.situacao|lower }}">{{ item.situacao }}</span>
                 {% if painel and item.parcela.fatura_id == painel.fatura.pk and item.bloqueia_fechamento %}<span class="invoice-status-note">Pendência de fechamento</span>{% endif %}
               </td>
               <td class="money {{ item.valor_assinado|classe_valor }}">{{ item.valor_assinado|brl_sinal }}</td>
