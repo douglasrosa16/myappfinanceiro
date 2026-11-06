@@ -2926,7 +2926,7 @@ class LancamentoDashboardTests(TestCase):
         self.assertNotIn("aria-live=", trecho_matriz)
         self.assertContains(
             resposta,
-            "O orçamento acompanha lançamentos da conta e parcelas mensais do cartão",
+            "no cartão, segue a Base da análise",
         )
         self.assertNotContains(
             resposta,
@@ -3190,7 +3190,7 @@ class LancamentoDashboardTests(TestCase):
         self.assertContains(resposta_sem_orcamento, "Nenhum orçamento cadastrado para 11/2026.")
         self.assertNotContains(resposta_sem_orcamento, "Cadastrar orçamento")
 
-    def test_dashboard_orcamento_usa_mes_completo_da_data_final_e_ignora_filtros(self):
+    def test_dashboard_orcamento_usa_mes_completo_respeita_base_e_ignora_demais_filtros(self):
         Orcamento.objects.create(
             usuario=self.usuario,
             categoria=self.categoria,
@@ -3209,6 +3209,7 @@ class LancamentoDashboardTests(TestCase):
                 "date_from": "15/10/2026",
                 "date_to": "05/11/2026",
                 "origin": "card",
+                "analysis_basis": "purchase",
             },
         )
 
@@ -3217,6 +3218,11 @@ class LancamentoDashboardTests(TestCase):
         self.assertEqual(orcamento["total_orcado"], Decimal("200.00"))
         self.assertEqual(orcamento["categorias"][0]["realizado"], Decimal("50.00"))
         self.assertEqual(orcamento["categorias"][0]["percentual_comprometido"], Decimal("25.00"))
+        detalhe = parse_qs(urlsplit(orcamento["categorias"][0]["detalhe_url"]).query)
+        fallback = parse_qs(urlsplit(orcamento["categorias"][0]["lancamentos_url"]).query)
+        self.assertEqual(detalhe["analysis_basis"], ["purchase"])
+        self.assertEqual(fallback["analysis_basis"], ["purchase"])
+        self.assertContains(resposta, "no cartão, segue a Base da análise")
 
     def test_barras_usam_decimal_com_ponto_no_atributo_css(self):
         outra_categoria = Categoria.objects.create(usuario=self.usuario, nome="Outra categoria")

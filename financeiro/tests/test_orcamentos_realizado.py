@@ -306,6 +306,65 @@ class RealizacaoOrcamentosTests(TestCase):
         self.assertEqual(detalhe_setembro["total_indicador"], Decimal("0.00"))
         self.assertEqual(detalhe_setembro["linhas"], [])
 
+    def test_orcamento_dashboard_respeita_base_por_compra_e_mantem_conta_por_data(self):
+        self.movimento(
+            "40.00",
+            categoria=self.filha,
+            data_evento=date(2026, 9, 5),
+        )
+        self.parcela("150.00", categoria=self.filha)
+        Orcamento.objects.create(
+            usuario=self.usuario,
+            categoria=self.categoria,
+            mes="2026-09",
+            ambito=Ambito.PESSOAL,
+            limite="500.00",
+        )
+
+        setembro_competencia = resumir_orcamento_dashboard(
+            self.usuario,
+            "2026-09",
+            analysis_basis="competence",
+        )
+        setembro_compra = resumir_orcamento_dashboard(
+            self.usuario,
+            "2026-09",
+            analysis_basis="purchase",
+        )
+        outubro_competencia = resumir_orcamento_dashboard(
+            self.usuario,
+            "2026-10",
+            analysis_basis="competence",
+        )
+        outubro_compra = resumir_orcamento_dashboard(
+            self.usuario,
+            "2026-10",
+            analysis_basis="purchase",
+        )
+
+        self.assertEqual(setembro_competencia["categorias"][0]["realizado"], Decimal("40.00"))
+        self.assertEqual(setembro_compra["categorias"][0]["realizado"], Decimal("190.00"))
+        self.assertEqual(outubro_competencia["categorias"][0]["realizado"], Decimal("150.00"))
+        self.assertEqual(outubro_compra["categorias"][0]["realizado"], Decimal("0.00"))
+
+        categoria = setembro_compra["categorias"][0]
+        detalhe = parse_qs(urlparse(categoria["detalhe_url"]).query)
+        fallback = parse_qs(urlparse(categoria["lancamentos_url"]).query)
+        self.assertEqual(detalhe["analysis_basis"], ["purchase"])
+        self.assertEqual(fallback["analysis_basis"], ["purchase"])
+
+        detalhamento = consultar_detalhamento_dashboard(
+            self.usuario,
+            tipo="category",
+            valor=str(self.categoria.pk),
+            scope=Ambito.PESSOAL,
+            analysis_basis="purchase",
+            date_from=date(2026, 9, 1),
+            date_to=date(2026, 9, 30),
+        )
+        self.assertEqual(detalhamento["total_indicador"], Decimal("190.00"))
+        self.assertEqual(len(detalhamento["linhas"]), 2)
+
     def test_importacao_consolida_base_do_realizado_e_contabiliza_ignorados(self):
         self.movimento("100.00", categoria=self.filha)
         self.parcela("30.00", categoria=self.neta)

@@ -275,6 +275,7 @@ def dashboard(request):
         request.user,
         contexto["data_final"].strftime("%Y-%m"),
         dashboard_context=True,
+        analysis_basis=contexto["analysis_basis"],
     )
     contexto["orcamento_dashboard"] = orcamento_dashboard
     contexto["pontos_atencao"] = (
