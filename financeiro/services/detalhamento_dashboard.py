@@ -7,7 +7,7 @@ from urllib.parse import urlencode
 
 from django.urls import reverse
 
-from financeiro.models import Ambito, Categoria, NaturezaEvento
+from financeiro.models import Ambito, Categoria, CompraCartao, NaturezaEvento
 from financeiro.services.dashboard import (
     ContribuicaoAnalitica,
     _categoria_superior,
@@ -15,11 +15,22 @@ from financeiro.services.dashboard import (
     carregar_contribuicoes_dashboard,
 )
 from financeiro.services.cobertura_credito import consultar_cobertura_credito
-from financeiro.services.lancamentos import LinhaLancamento, _linha_movimento, _linha_parcela
+from financeiro.services.lancamentos import (
+    LinhaLancamento,
+    _linha_compra_analitica,
+    _linha_movimento,
+    _linha_parcela,
+)
 
 
 ZERO = Decimal("0.00")
-TIPOS_DETALHAMENTO = {"essentiality", "category", "category_nature", "controllable"}
+TIPOS_DETALHAMENTO = {
+    "essentiality",
+    "category",
+    "subcategory",
+    "category_nature",
+    "controllable",
+}
 ESSENCIALIDADES_CONTROLAVEIS = {
     Categoria.Essencialidade.ESTILO_VIDA,
     Categoria.Essencialidade.SUPERFLUO,
@@ -51,12 +62,14 @@ def _resolver_indicador(tipo: str, valor: str, categorias: dict[int, Categoria])
             raise DetalhamentoDashboardInvalido("Gastos controláveis não recebem valor.")
         return {"tipo": tipo, "valor": "", "rotulo": "Gastos controláveis"}
 
-    if valor == "unclassified":
+    if valor == "unclassified" and tipo == "category":
         return {"tipo": tipo, "valor": valor, "rotulo": "A classificar", "categoria_id": None}
     if not str(valor or "").isdigit():
         raise DetalhamentoDashboardInvalido("Categoria inválida.")
     categoria = categorias.get(int(valor))
-    if not categoria or _categoria_superior(categoria, categorias).pk != categoria.pk:
+    if not categoria:
+        raise DetalhamentoDashboardInvalido("Categoria inválida.")
+    if tipo == "category" and _categoria_superior(categoria, categorias).pk != categoria.pk:
         raise DetalhamentoDashboardInvalido("Categoria inválida.")
     return {
         "tipo": tipo,
@@ -76,7 +89,7 @@ def _contribuicao_compativel(
         return False
     ambito_contribuicao = (
         contribuicao.registro.evento.ambito
-        if contribuicao.origem == "CONTA"
+        if contribuicao.origem == "CONTA" or isinstance(contribuicao.registro, CompraCartao)
         else contribuicao.registro.ambito_exibicao
     )
     if ambito != "all" and ambito_contribuicao != ambito:
@@ -92,6 +105,8 @@ def _contribuicao_compativel(
         return bool(categoria and categoria.essencialidade in ESSENCIALIDADES_CONTROLAVEIS)
     if indicador["categoria_id"] is None:
         return categoria is None
+    if tipo == "subcategory":
+        return bool(categoria and categoria.pk == indicador["categoria_id"])
     return bool(
         categoria
         and _categoria_superior(categoria, categorias).pk == indicador["categoria_id"]
@@ -100,7 +115,12 @@ def _contribuicao_compativel(
 
 def _linha_detalhamento(contribuicoes: list[ContribuicaoAnalitica]) -> LinhaLancamento | None:
     registro = contribuicoes[0].registro
-    linha_base = _linha_movimento(registro) if contribuicoes[0].origem == "CONTA" else _linha_parcela(registro)
+    if contribuicoes[0].origem == "CONTA":
+        linha_base = _linha_movimento(registro)
+    elif isinstance(registro, CompraCartao):
+        linha_base = _linha_compra_analitica(registro)
+    else:
+        linha_base = _linha_parcela(registro)
     valor = sum((item.valor_indicador for item in contribuicoes), ZERO)
     if valor == ZERO:
         return None
@@ -114,10 +134,19 @@ def _linha_detalhamento(contribuicoes: list[ContribuicaoAnalitica]) -> LinhaLanc
         if categorias
         else "A classificar"
     )
+    natureza_linha = NaturezaEvento.ESTORNO if valor < ZERO else NaturezaEvento.DESPESA
+    origem_tipo = linha_base.origem_tipo
+    if isinstance(registro, CompraCartao):
+        origem_tipo = (
+            "Cartão • Compra no cartão • "
+            f"{'Estorno' if natureza_linha == NaturezaEvento.ESTORNO else 'Despesa'}"
+        )
     return replace(
         linha_base,
         categoria=categoria,
         categoria_ids=tuple(categorias),
+        natureza_valor=natureza_linha,
+        origem_tipo=origem_tipo,
         valor=valor,
     )
 
@@ -138,6 +167,7 @@ def _url_lancamentos(
         "analysis_type": indicador["tipo"],
         "analysis_value": indicador["valor"],
         "analysis_nature": dados["natureza"],
+        "analysis_basis": dados["analysis_basis"],
         "computes": computacao,
     }
     if ambito != "all":
@@ -148,6 +178,8 @@ def _url_lancamentos(
         parametros["essentiality"] = indicador["valor"]
     elif indicador["tipo"] == "category" and indicador["categoria_id"] is not None:
         parametros["parent_category"] = indicador["categoria_id"]
+    elif indicador["tipo"] == "subcategory":
+        parametros["category"] = indicador["categoria_id"]
     elif indicador["tipo"] == "category_nature":
         parametros["category_nature"] = indicador["valor"]
     return f"{reverse('eventos')}?{urlencode(parametros)}"
@@ -162,6 +194,7 @@ def consultar_detalhamento_dashboard(
     cartao_id=None,
     origem="all",
     natureza="all",
+    analysis_basis="competence",
     computacao="COMPUTA",
     scope="all",
     date_from=None,
@@ -208,6 +241,7 @@ def consultar_detalhamento_dashboard(
         cartao_id=cartao_id,
         origem=origem,
         natureza=natureza,
+        analysis_basis=analysis_basis,
         computacao=computacao,
         date_from=date_from,
         date_to=date_to,
@@ -238,6 +272,7 @@ def consultar_detalhamento_dashboard(
         "analysis_type": indicador["tipo"],
         "analysis_value": indicador["valor"],
         "analysis_nature": dados["natureza"],
+        "analysis_basis": dados["analysis_basis"],
         "analysis_scope": scope,
         "computes": computacao,
         "linhas": linhas,

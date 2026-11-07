@@ -10,8 +10,11 @@ from django.db import transaction
 from django.urls import reverse
 from django.utils import timezone
 
-from financeiro.models import Categoria, Orcamento
-from financeiro.services.dashboard import carregar_contribuicoes_dashboard
+from financeiro.models import Categoria, CompraCartao, Orcamento
+from financeiro.services.dashboard import (
+    carregar_contribuicoes_dashboard,
+    normalizar_base_analise,
+)
 
 
 ZERO = Decimal("0.00")
@@ -20,6 +23,7 @@ CLONAGEM_COMPLETA = "completa"
 CLONAGEM_PARCIAL = "parcial"
 IMPORTACAO_COMPLETA = "completa"
 IMPORTACAO_PARCIAL = "parcial"
+BASE_ANALISE_ORCAMENTO = "competence"
 
 
 class ClonagemPeriodoOrcamentoInvalida(ValueError):
@@ -130,25 +134,26 @@ def _categoria_superior_id(categoria, categorias: dict) -> int | None:
 
 
 def _chave_contribuicao(contribuicao, categorias: dict) -> tuple[str, int | None, str]:
-    if contribuicao.origem == "CONTA":
-        competencia = contribuicao.registro.evento.data.strftime("%Y-%m")
+    mes_analise = contribuicao.data_analise.strftime("%Y-%m")
+    if contribuicao.origem == "CONTA" or isinstance(contribuicao.registro, CompraCartao):
         ambito = contribuicao.registro.evento.ambito
     else:
-        competencia = contribuicao.registro.vencimento.strftime("%Y-%m")
         ambito = contribuicao.registro.ambito_exibicao
-    return competencia, _categoria_superior_id(contribuicao.categoria, categorias), ambito
+    return mes_analise, _categoria_superior_id(contribuicao.categoria, categorias), ambito
 
 
 def _consolidar_realizados(
     usuario,
     meses: set[str],
     dashboard_context=False,
+    analysis_basis=BASE_ANALISE_ORCAMENTO,
 ) -> tuple[dict, dict]:
     data_inicial, data_final = _limites_meses(meses)
     dados = carregar_contribuicoes_dashboard(
         usuario,
         date_from=data_inicial,
         date_to=data_final,
+        analysis_basis=analysis_basis,
         aplicar_composicao_dashboard=dashboard_context,
     )
     realizados = defaultdict(lambda: ZERO)
@@ -326,6 +331,7 @@ def _urls_detalhamento_categoria(
     categoria_id: int,
     ambito: str = "all",
     dashboard_context=False,
+    analysis_basis=BASE_ANALISE_ORCAMENTO,
 ) -> tuple[str, str]:
     ano, mes = (int(parte) for parte in mes_referencia.split("-"))
     data_inicial = date(ano, mes, 1)
@@ -336,6 +342,7 @@ def _urls_detalhamento_categoria(
         "account": "all",
         "card": "all",
         "origin": "all",
+        "analysis_basis": analysis_basis,
     }
     detalhe = {
         **base,
@@ -366,12 +373,14 @@ def _urls_detalhamento_categoria(
 def _urls_detalhamento(
     orcamento: Orcamento,
     dashboard_context=False,
+    analysis_basis=BASE_ANALISE_ORCAMENTO,
 ) -> tuple[str, str]:
     return _urls_detalhamento_categoria(
         orcamento.mes,
         orcamento.categoria_id,
         orcamento.ambito,
         dashboard_context=dashboard_context,
+        analysis_basis=analysis_basis,
     )
 
 
@@ -379,7 +388,9 @@ def enriquecer_orcamentos_com_realizado(
     usuario,
     orcamentos: list[Orcamento],
     dashboard_context=False,
+    analysis_basis=BASE_ANALISE_ORCAMENTO,
 ) -> list[Orcamento]:
+    analysis_basis = normalizar_base_analise(analysis_basis)
     if not orcamentos:
         return orcamentos
 
@@ -388,6 +399,7 @@ def enriquecer_orcamentos_com_realizado(
         usuario,
         meses,
         dashboard_context=dashboard_context,
+        analysis_basis=analysis_basis,
     )
 
     for orcamento in orcamentos:
@@ -406,11 +418,18 @@ def enriquecer_orcamentos_com_realizado(
         orcamento.detalhe_url, orcamento.lancamentos_url = _urls_detalhamento(
             orcamento,
             dashboard_context=dashboard_context,
+            analysis_basis=analysis_basis,
         )
     return orcamentos
 
 
-def resumir_orcamento_dashboard(usuario, mes: str, dashboard_context=False) -> dict:
+def resumir_orcamento_dashboard(
+    usuario,
+    mes: str,
+    dashboard_context=False,
+    analysis_basis=BASE_ANALISE_ORCAMENTO,
+) -> dict:
+    analysis_basis = normalizar_base_analise(analysis_basis)
     orcamentos = list(
         Orcamento.objects.filter(usuario=usuario, mes=mes)
         .select_related("categoria", "categoria__categoria_pai")
@@ -420,6 +439,7 @@ def resumir_orcamento_dashboard(usuario, mes: str, dashboard_context=False) -> d
         usuario,
         orcamentos,
         dashboard_context=dashboard_context,
+        analysis_basis=analysis_basis,
     )
 
     consolidados = {}
@@ -466,6 +486,7 @@ def resumir_orcamento_dashboard(usuario, mes: str, dashboard_context=False) -> d
             mes,
             item["categoria_id"],
             dashboard_context=dashboard_context,
+            analysis_basis=analysis_basis,
         )
         categorias.append(item)
 

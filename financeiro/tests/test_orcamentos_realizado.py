@@ -162,6 +162,209 @@ class RealizacaoOrcamentosTests(TestCase):
         self.assertEqual(orcamento.percentual_css, "46.00")
         self.assertEqual(orcamento.faixa_percentual, "blue")
 
+    @patch("financeiro.services.orcamentos.carregar_contribuicoes_dashboard")
+    def test_orcamento_fixa_explicitamente_a_base_por_competencia(self, carregar_contribuicoes):
+        carregar_contribuicoes.return_value = {
+            "contribuicoes": [],
+            "categorias": {},
+        }
+
+        [orcamento] = enriquecer_orcamentos_com_realizado(self.usuario, [self.orcamento])
+
+        self.assertEqual(orcamento.realizado, Decimal("0.00"))
+        carregar_contribuicoes.assert_called_once()
+        self.assertEqual(
+            carregar_contribuicoes.call_args.kwargs["analysis_basis"],
+            "competence",
+        )
+
+    def test_orcamento_acompanha_as_parcelas_mensais_sem_duplicar_pagamento_da_fatura(self):
+        evento = EventoFinanceiro.objects.create(
+            usuario=self.usuario,
+            natureza=NaturezaEvento.DESPESA,
+            descricao="Compra parcelada de setembro",
+            data=date(2026, 9, 20),
+            valor="300.00",
+            ambito=Ambito.PESSOAL,
+            situacao=Situacao.REALIZADO,
+        )
+        compra = CompraCartao.objects.create(
+            usuario=self.usuario,
+            cartao=self.cartao,
+            evento=evento,
+            estabelecimento="Compra parcelada",
+            data_compra=date(2026, 9, 20),
+            valor_total="300.00",
+            total_parcelas=3,
+        )
+        faturas = [
+            self.fatura,
+            Fatura.objects.create(
+                usuario=self.usuario,
+                cartao=self.cartao,
+                ciclo="2026-11",
+                vencimento=date(2026, 11, 10),
+            ),
+            Fatura.objects.create(
+                usuario=self.usuario,
+                cartao=self.cartao,
+                ciclo="2026-12",
+                vencimento=date(2026, 12, 10),
+            ),
+        ]
+        for numero, fatura in enumerate(faturas, start=1):
+            ParcelaCartao.objects.create(
+                compra=compra,
+                fatura=fatura,
+                natureza=NaturezaEvento.DESPESA,
+                descricao=f"Compra parcelada {numero}/3",
+                data_original=date(2026, 9, 20),
+                vencimento=fatura.vencimento,
+                categoria=self.filha,
+                numero=numero,
+                total=3,
+                valor="100.00",
+                situacao=Situacao.PREVISTO,
+            )
+
+        self.movimento(
+            "300.00",
+            categoria=self.filha,
+            natureza=NaturezaEvento.PAGAMENTO_FATURA,
+            data_evento=date(2026, 10, 10),
+        )
+        orcamentos = [
+            Orcamento.objects.create(
+                usuario=self.usuario,
+                categoria=self.categoria,
+                mes="2026-09",
+                ambito=Ambito.PESSOAL,
+                limite="500.00",
+            ),
+            self.orcamento,
+            Orcamento.objects.create(
+                usuario=self.usuario,
+                categoria=self.categoria,
+                mes="2026-11",
+                ambito=Ambito.PESSOAL,
+                limite="500.00",
+            ),
+            Orcamento.objects.create(
+                usuario=self.usuario,
+                categoria=self.categoria,
+                mes="2026-12",
+                ambito=Ambito.PESSOAL,
+                limite="500.00",
+            ),
+        ]
+
+        enriquecer_orcamentos_com_realizado(self.usuario, orcamentos)
+
+        self.assertEqual(
+            {orcamento.mes: orcamento.realizado for orcamento in orcamentos},
+            {
+                "2026-09": Decimal("0.00"),
+                "2026-10": Decimal("100.00"),
+                "2026-11": Decimal("100.00"),
+                "2026-12": Decimal("100.00"),
+            },
+        )
+        self.assertEqual(
+            consolidar_despesas_para_orcamento(self.usuario, "2026-09")["valor_importavel"],
+            Decimal("0.00"),
+        )
+        self.assertEqual(
+            consolidar_despesas_para_orcamento(self.usuario, "2026-10")["valor_importavel"],
+            Decimal("100.00"),
+        )
+        for orcamento in orcamentos:
+            detalhe = parse_qs(urlparse(orcamento.detalhe_url).query)
+            fallback = parse_qs(urlparse(orcamento.lancamentos_url).query)
+            self.assertEqual(detalhe["analysis_basis"], ["competence"])
+            self.assertEqual(fallback["analysis_basis"], ["competence"])
+
+        detalhe_outubro = consultar_detalhamento_dashboard(
+            self.usuario,
+            tipo="category",
+            valor=str(self.categoria.pk),
+            scope=Ambito.PESSOAL,
+            analysis_basis="competence",
+            date_from=date(2026, 10, 1),
+            date_to=date(2026, 10, 31),
+        )
+        detalhe_setembro = consultar_detalhamento_dashboard(
+            self.usuario,
+            tipo="category",
+            valor=str(self.categoria.pk),
+            scope=Ambito.PESSOAL,
+            analysis_basis="competence",
+            date_from=date(2026, 9, 1),
+            date_to=date(2026, 9, 30),
+        )
+        self.assertEqual(detalhe_outubro["total_indicador"], Decimal("100.00"))
+        self.assertEqual(len(detalhe_outubro["linhas"]), 1)
+        self.assertEqual(detalhe_setembro["total_indicador"], Decimal("0.00"))
+        self.assertEqual(detalhe_setembro["linhas"], [])
+
+    def test_orcamento_dashboard_respeita_base_por_compra_e_mantem_conta_por_data(self):
+        self.movimento(
+            "40.00",
+            categoria=self.filha,
+            data_evento=date(2026, 9, 5),
+        )
+        self.parcela("150.00", categoria=self.filha)
+        Orcamento.objects.create(
+            usuario=self.usuario,
+            categoria=self.categoria,
+            mes="2026-09",
+            ambito=Ambito.PESSOAL,
+            limite="500.00",
+        )
+
+        setembro_competencia = resumir_orcamento_dashboard(
+            self.usuario,
+            "2026-09",
+            analysis_basis="competence",
+        )
+        setembro_compra = resumir_orcamento_dashboard(
+            self.usuario,
+            "2026-09",
+            analysis_basis="purchase",
+        )
+        outubro_competencia = resumir_orcamento_dashboard(
+            self.usuario,
+            "2026-10",
+            analysis_basis="competence",
+        )
+        outubro_compra = resumir_orcamento_dashboard(
+            self.usuario,
+            "2026-10",
+            analysis_basis="purchase",
+        )
+
+        self.assertEqual(setembro_competencia["categorias"][0]["realizado"], Decimal("40.00"))
+        self.assertEqual(setembro_compra["categorias"][0]["realizado"], Decimal("190.00"))
+        self.assertEqual(outubro_competencia["categorias"][0]["realizado"], Decimal("150.00"))
+        self.assertEqual(outubro_compra["categorias"][0]["realizado"], Decimal("0.00"))
+
+        categoria = setembro_compra["categorias"][0]
+        detalhe = parse_qs(urlparse(categoria["detalhe_url"]).query)
+        fallback = parse_qs(urlparse(categoria["lancamentos_url"]).query)
+        self.assertEqual(detalhe["analysis_basis"], ["purchase"])
+        self.assertEqual(fallback["analysis_basis"], ["purchase"])
+
+        detalhamento = consultar_detalhamento_dashboard(
+            self.usuario,
+            tipo="category",
+            valor=str(self.categoria.pk),
+            scope=Ambito.PESSOAL,
+            analysis_basis="purchase",
+            date_from=date(2026, 9, 1),
+            date_to=date(2026, 9, 30),
+        )
+        self.assertEqual(detalhamento["total_indicador"], Decimal("190.00"))
+        self.assertEqual(len(detalhamento["linhas"]), 2)
+
     def test_importacao_consolida_base_do_realizado_e_contabiliza_ignorados(self):
         self.movimento("100.00", categoria=self.filha)
         self.parcela("30.00", categoria=self.neta)
@@ -546,11 +749,13 @@ class RealizacaoOrcamentosTests(TestCase):
         self.assertEqual(detalhe["type"], ["category"])
         self.assertEqual(detalhe["value"], [str(self.categoria.pk)])
         self.assertEqual(detalhe["scope"], [Ambito.PESSOAL])
+        self.assertEqual(detalhe["analysis_basis"], ["competence"])
 
         fallback = parse_qs(urlparse(orcamento.lancamentos_url).query)
         self.assertEqual(fallback["analysis_scope"], [Ambito.PESSOAL])
         self.assertEqual(fallback["parent_category"], [str(self.categoria.pk)])
         self.assertEqual(fallback["computes"], ["COMPUTA"])
+        self.assertEqual(fallback["analysis_basis"], ["competence"])
 
     def test_detalhamento_filtra_ambito_efetivo_de_conta_e_cartao(self):
         self.movimento("40.00", categoria=self.filha, ambito=Ambito.PESSOAL)

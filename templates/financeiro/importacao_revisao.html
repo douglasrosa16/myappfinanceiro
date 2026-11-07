@@ -109,7 +109,7 @@
           <label class="field item-field-date">Data revisada<input type="date" name="data_revisada" value="{{ item.data_revisada|date:'Y-m-d' }}"></label>
           <label class="field item-field-value">Valor revisado<input name="valor_revisado" inputmode="decimal" value="{{ item.valor_revisado|default_if_none:'' }}"></label>
           <label class="field item-field-nature">Natureza<select name="natureza">{% for value,label in naturezas %}<option value="{{ value }}" {% if item.natureza == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
-          <label class="field item-field-category">Categoria<select name="categoria"><option value="">A classificar</option>{% for categoria in categorias %}<option value="{{ categoria.pk }}" {% if item.categoria_id == categoria.pk %}selected{% endif %}>{{ categoria.rotulo_com_pai }}</option>{% endfor %}</select></label>
+          <label class="field item-field-category">Categoria<select name="categoria" data-category-field><option value="">A classificar</option>{% for categoria in categorias %}<option value="{{ categoria.pk }}" data-category-active="{% if categoria.ativa %}true{% else %}false{% endif %}" {% if item.categoria_id == categoria.pk %}selected{% endif %} {% if not categoria.ativa %}disabled{% endif %}>{{ categoria.rotulo_com_pai }}{% if not categoria.ativa %} (inativa){% endif %}</option>{% endfor %}</select></label>
           <label class="field item-field-person">Pessoa<select name="pessoa"><option value="">Não definida</option>{% for pessoa in pessoas %}<option value="{{ pessoa.pk }}" {% if item.pessoa_id == pessoa.pk %}selected{% endif %}>{{ pessoa.nome }}</option>{% endfor %}</select></label>
           <label class="field item-field-scope">Âmbito<select name="ambito">{% for value,label in ambitos %}<option value="{{ value }}" {% if item.ambito == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
           <label class="field item-field-action">Ação<select name="acao">{% for value,label in acoes %}<option value="{{ value }}" {% if item.acao == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
@@ -273,6 +273,7 @@ function setupLinkPicker(form) {
   const feedback = form.querySelector('[data-link-feedback]');
   const query = form.querySelector('[data-link-query]');
   const saveButton = form.querySelector('button[type="submit"]');
+  const category = form.querySelector('[data-category-field]');
   let loaded = false;
   let currentCandidates = [];
   let currentScope = 'SUGESTOES';
@@ -301,6 +302,34 @@ function setupLinkPicker(form) {
     return moneyFromApi(valor / 100);
   }
 
+  function bloquearCategoriaVinculo(categoriaId) {
+    if (!category) return;
+    category.value = categoriaId ? String(categoriaId) : '';
+    category.disabled = true;
+    category.dataset.linkDerived = 'true';
+    category.title = 'Categoria definida pelo lançamento vinculado.';
+  }
+
+  function liberarCategoria({limpar = false} = {}) {
+    if (!category) return;
+    category.disabled = false;
+    delete category.dataset.linkDerived;
+    category.removeAttribute('title');
+    const opcaoAtual = category.selectedOptions[0];
+    if (limpar || opcaoAtual?.dataset.categoryActive === 'false') category.value = '';
+  }
+
+  function sincronizarCategoriaTitulos() {
+    const titulos = [...selectedTitles.values()];
+    if (!titulos.length || titulos.some((titulo) => !titulo)) return;
+    const categorias = titulos.map((titulo) => titulo.categoria_id).filter((categoriaId) => categoriaId !== null && categoriaId !== undefined && categoriaId !== '');
+    const categoriasUnicas = new Set(categorias.map(String));
+    const categoriaId = categorias.length === titulos.length && categoriasUnicas.size === 1
+      ? categorias[0]
+      : '';
+    bloquearCategoriaVinculo(categoriaId);
+  }
+
   function limparSelecaoMultipla() {
     selectedTitles.clear();
     if (titlesInput) titlesInput.value = '';
@@ -318,6 +347,7 @@ function setupLinkPicker(form) {
     titlesInput.value = [...selectedTitles.keys()].join(',');
     if (!selectedTitles.size) {
       target.hidden = true;
+      liberarCategoria({limpar: true});
       if (saveButton) saveButton.disabled = false;
       return;
     }
@@ -330,6 +360,7 @@ function setupLinkPicker(form) {
     targetTitle.textContent = `${selectedTitles.size} título${selectedTitles.size === 1 ? '' : 's'} selecionado${selectedTitles.size === 1 ? '' : 's'}`;
     targetDetail.textContent = `Selecionado ${dinheiroEmCentavos(total)} de ${dinheiroEmCentavos(valorItem)} · diferença ${dinheiroEmCentavos(diferenca)}`;
     target.hidden = false;
+    sincronizarCategoriaTitulos();
     if (feedback) feedback.textContent = diferenca === 0
       ? 'A soma está exata. Salve o item para registrar os vínculos.'
       : `Selecione títulos até totalizar exatamente ${dinheiroEmCentavos(valorItem)}.`;
@@ -368,6 +399,7 @@ function setupLinkPicker(form) {
     targetTitle.textContent = `${candidateLabels[candidate.tipo]}: ${candidate.descricao}`;
     targetDetail.textContent = `${moneyFromApi(candidate.saldo ?? candidate.valor)} · ${candidate.data.split('-').reverse().join('/')} · ${candidate.conta}`;
     target.hidden = false;
+    bloquearCategoriaVinculo(candidate.categoria_id);
     if (feedback) feedback.textContent = 'Destino selecionado. Salve o item para registrar o vínculo.';
   }
 
@@ -444,6 +476,7 @@ function setupLinkPicker(form) {
       limparSelecaoMultipla();
       if (removeLinkInput) removeLinkInput.value = '';
       if (target) target.hidden = true;
+      liberarCategoria();
     }
   });
   form.querySelector('[data-search-links]')?.addEventListener('click', () => loadCandidates('SUGESTOES'));
@@ -458,9 +491,12 @@ function setupLinkPicker(form) {
     target.hidden = true;
     targetTitle.textContent = '';
     targetDetail.textContent = '';
+    liberarCategoria({limpar: true});
     renderCandidates(currentCandidates);
     if (feedback) feedback.textContent = 'Vínculo removido. Salve o item para registrar a remoção ou selecione outro destino.';
   });
+  if (action.value === 'VINCULAR' && target && !target.hidden) bloquearCategoriaVinculo(category?.value);
+  else liberarCategoria();
   if (action.value === 'VINCULAR' && !titleInput.value && !movementInput.value && !installmentInput.value && form.dataset.linkLocked !== 'true') loadCandidates();
 }
 

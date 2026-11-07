@@ -269,11 +269,13 @@ def dashboard(request):
         cartao_id=request.GET.get("card"),
         origem=request.GET.get("origin", "all"),
         natureza=request.GET.get("nature", "all"),
+        analysis_basis=request.GET.get("analysis_basis", "competence"),
     )
     orcamento_dashboard = resumir_orcamento_dashboard(
         request.user,
         contexto["data_final"].strftime("%Y-%m"),
         dashboard_context=True,
+        analysis_basis=contexto["analysis_basis"],
     )
     contexto["orcamento_dashboard"] = orcamento_dashboard
     contexto["pontos_atencao"] = (
@@ -298,6 +300,7 @@ def dashboard_detalhamento(request):
             cartao_id=request.GET.get("card"),
             origem=request.GET.get("origin", "all"),
             natureza=request.GET.get("nature", "all"),
+            analysis_basis=request.GET.get("analysis_basis", "competence"),
             computacao=request.GET.get("computes", "COMPUTA"),
             scope=request.GET.get("scope", "all"),
             dashboard_context=request.GET.get("dashboard_context") == "1",
@@ -324,6 +327,7 @@ FILTROS_RETORNO_EVENTOS = (
     "analysis_value",
     "analysis_nature",
     "analysis_scope",
+    "analysis_basis",
     "group_card_invoices",
     "card_purchase_date",
     "dashboard_context",
@@ -355,7 +359,7 @@ def _url_retorno_lancamento(request, periodo: str, destino_padrao="eventos"):
         _adicionar_filtros_retorno(
             request,
             parametros,
-            ("date_from", "date_to", "origin", "nature"),
+            ("date_from", "date_to", "origin", "nature", "analysis_basis"),
         )
     else:
         _adicionar_filtros_retorno(request, parametros, FILTROS_RETORNO_EVENTOS)
@@ -386,6 +390,7 @@ def lancamentos(request):
             analysis_value=request.GET.get("analysis_value", ""),
             analysis_nature=request.GET.get("analysis_nature", "all"),
             analysis_scope=request.GET.get("analysis_scope", "all"),
+            analysis_basis=request.GET.get("analysis_basis", "competence"),
             group_card_invoices=request.GET.get("group_card_invoices"),
             card_purchase_date=request.GET.get("card_purchase_date"),
             dashboard_context=request.GET.get("dashboard_context") == "1",
@@ -1773,7 +1778,7 @@ def importacao_revisao(request, pk):
         "busca": busca,
         "status_filtro": status,
         "revisao_filtro": revisao,
-        "categorias": Categoria.objects.filter(usuario=request.user, ativa=True).select_related("categoria_pai"),
+        "categorias": Categoria.objects.filter(usuario=request.user).select_related("categoria_pai"),
         "pessoas": Pessoa.objects.filter(usuario=request.user, ativa=True),
         "naturezas": EventoFinanceiro._meta.get_field("natureza").choices,
         "ambitos": EventoFinanceiro._meta.get_field("ambito").choices,

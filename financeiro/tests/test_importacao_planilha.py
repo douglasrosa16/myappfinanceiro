@@ -101,6 +101,7 @@ class ImportacaoPlanilhaTests(TestCase):
         total=2,
         ciclo="2026-11",
         situacao=Situacao.PREVISTO,
+        categoria=None,
     ):
         evento = EventoFinanceiro.objects.create(
             usuario=self.usuario,
@@ -135,6 +136,7 @@ class ImportacaoPlanilhaTests(TestCase):
             total=total,
             valor=Decimal(valor),
             situacao=situacao,
+            categoria=categoria,
         )
 
     def test_csv_cria_compra_e_parcelas_futuras(self):
@@ -440,8 +442,14 @@ class ImportacaoPlanilhaTests(TestCase):
         self.assertEqual(CompraCartao.objects.count(), 1)
 
     def test_planilha_sugere_parcela_existente_por_data_e_valor(self):
+        categoria_vinculo = Categoria.objects.create(
+            usuario=self.usuario,
+            nome="Farmácia",
+            tipo=Categoria.Tipo.DESPESA,
+        )
         parcela = self.criar_parcela_existente(
             descricao="SPLENDORE FARMACI",
+            categoria=categoria_vinculo,
         )
         lote = self.criar_lote_planilha(
             csv_upload(
@@ -466,9 +474,11 @@ class ImportacaoPlanilhaTests(TestCase):
         self.assertEqual(item.status, ItemImportacao.Status.PENDENTE)
         self.assertEqual(item.acao, ItemImportacao.Acao.VINCULAR)
         self.assertEqual(item.parcela_id, parcela.pk)
+        self.assertEqual(item.categoria_id, categoria_vinculo.pk)
         self.assertIn("Sugestão automática", item.motivo_status)
         self.assertIn(parcela.pk, [candidato["id"] for candidato in resultado["resultados"]])
         candidato = next(candidato for candidato in resultado["resultados"] if candidato["id"] == parcela.pk)
+        self.assertEqual(candidato["categoria_id"], categoria_vinculo.pk)
         self.assertIn("valor exato", candidato["motivos"])
         self.assertIn("mesma data", candidato["motivos"])
 

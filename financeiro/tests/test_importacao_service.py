@@ -105,6 +105,7 @@ class ImportacaoServiceTests(TestCase):
         data_compra=date(2026, 9, 10),
         status_fatura=Fatura.Status.ABERTA,
         situacao=Situacao.PREVISTO,
+        categoria=None,
     ):
         evento = EventoFinanceiro.objects.create(
             usuario=self.usuario,
@@ -139,6 +140,7 @@ class ImportacaoServiceTests(TestCase):
             total=total,
             valor=Decimal(valor),
             situacao=situacao,
+            categoria=categoria,
         )
         return parcela
 
@@ -156,16 +158,20 @@ class ImportacaoServiceTests(TestCase):
             ).count(),
             2,
         )
+        categoria = Categoria.objects.create(usuario=self.usuario, nome="Categoria reimportada")
         item_com_observacao = primeiro.itens.order_by("posicao").first()
         item_com_observacao.observacao = "Conferido no extrato semanal."
-        item_com_observacao.save(update_fields=["observacao"])
+        item_com_observacao.categoria = categoria
+        item_com_observacao.save(update_fields=["observacao", "categoria"])
         confirmar_importacao(primeiro.pk, self.usuario)
         self.assertEqual(EventoFinanceiro.objects.count(), 2)
         self.assertEqual(MovimentoConta.objects.count(), 2)
 
         segundo = self.criar_lote(documento, nome="mesmo-nome.ofx")
         self.assertEqual(segundo.itens.filter(status=ItemImportacao.Status.CONCILIADO).count(), 2)
-        self.assertEqual(segundo.itens.get(posicao=item_com_observacao.posicao).observacao, "Conferido no extrato semanal.")
+        item_reimportado = segundo.itens.get(posicao=item_com_observacao.posicao)
+        self.assertEqual(item_reimportado.observacao, "Conferido no extrato semanal.")
+        self.assertEqual(item_reimportado.categoria_id, categoria.pk)
         confirmar_importacao(segundo.pk, self.usuario)
         terceiro = self.criar_lote(documento, nome="terceiro.ofx")
         self.assertEqual(terceiro.itens.filter(status=ItemImportacao.Status.CONCILIADO).count(), 2)
@@ -273,7 +279,7 @@ class ImportacaoServiceTests(TestCase):
         self.assertEqual(item.categoria_id, categoria_regra.pk)
         self.assertEqual(item.ambito, Ambito.PROFISSIONAL)
 
-    def test_regra_nova_e_aplicada_somente_depois_da_conciliacao(self):
+    def test_regra_nova_classifica_item_sem_sobrescrever_natureza_do_sinal(self):
         categoria = Categoria.objects.create(usuario=self.usuario, nome="Compras categorizadas")
         regra = RegraCategoria.objects.create(
             usuario=self.usuario,
@@ -298,12 +304,43 @@ class ImportacaoServiceTests(TestCase):
         self.assertEqual(item.acao, ItemImportacao.Acao.CRIAR)
         self.assertEqual(item.categoria, categoria)
         self.assertEqual(item.ambito, Ambito.PROFISSIONAL)
-        self.assertEqual(item.natureza, NaturezaEvento.RECEITA)
+        self.assertEqual(item.natureza, NaturezaEvento.DESPESA)
         self.assertIn("Mercado como receita", item.motivo_status)
 
         confirmar_importacao(lote.pk, self.usuario)
         item.refresh_from_db()
         self.assertIn("Mercado como receita", item.motivo_status)
+
+    def test_mesma_regra_preserva_despesa_e_receita_conforme_sinal_da_conta(self):
+        categoria = Categoria.objects.create(usuario=self.usuario, nome="Transferências classificadas")
+        regra = RegraCategoria.objects.create(
+            usuario=self.usuario,
+            nome="Transferência da mesma pessoa",
+            prioridade=1,
+            categoria=categoria,
+            natureza_sugerida=NaturezaEvento.DESPESA,
+        )
+        RegraCategoriaCondicao.objects.create(
+            regra=regra,
+            ordem=1,
+            campo=RegraCategoriaCondicao.Campo.DESCRICAO,
+            operador=RegraCategoriaCondicao.Operador.CONTEM,
+            valor="PESSOA TESTE",
+        )
+        ofx = (
+            OFX_CONTA.replace(b"<TRNTYPE>DEBIT", b"<TRNTYPE>CREDIT", 1)
+            .replace(b"Mercado Central", b"Pessoa Teste")
+            .replace(b"Cliente XPTO", b"Pessoa Teste")
+        )
+
+        lote = self.criar_lote(OFXParser.parse(ofx))
+        despesa = lote.itens.get(valor=Decimal("-125.50"))
+        receita = lote.itens.get(valor=Decimal("2500.00"))
+
+        self.assertEqual(despesa.natureza, NaturezaEvento.DESPESA)
+        self.assertEqual(receita.natureza, NaturezaEvento.RECEITA)
+        self.assertEqual(despesa.categoria, categoria)
+        self.assertEqual(receita.categoria, categoria)
 
     def test_regra_nova_nao_altera_item_pre_vinculado(self):
         documento = OFXParser.parse(OFX_CONTA)
@@ -340,6 +377,7 @@ class ImportacaoServiceTests(TestCase):
     def test_conta_preseleciona_movimento_exato_e_permite_criar(self):
         documento = OFXParser.parse(OFX_CONTA)
         registro = documento.transacoes[0]
+        categoria = Categoria.objects.create(usuario=self.usuario, nome="Categoria do movimento")
         evento = EventoFinanceiro.objects.create(
             usuario=self.usuario,
             natureza=NaturezaEvento.RECEITA if registro.valor > 0 else NaturezaEvento.DESPESA,
@@ -348,6 +386,7 @@ class ImportacaoServiceTests(TestCase):
             valor=abs(registro.valor),
             situacao=Situacao.REALIZADO,
         )
+        RateioCategoria.objects.create(evento=evento, categoria=categoria, valor=evento.valor)
         movimento = MovimentoConta.objects.create(
             conta=self.conta,
             evento=evento,
@@ -360,6 +399,7 @@ class ImportacaoServiceTests(TestCase):
         self.assertEqual(item.status, ItemImportacao.Status.PENDENTE)
         self.assertEqual(item.acao, ItemImportacao.Acao.VINCULAR)
         self.assertEqual(item.movimento_conta_id, movimento.pk)
+        self.assertEqual(item.categoria_id, categoria.pk)
         self.assertIn("Sugestão automática", item.motivo_status)
 
         self.client.force_login(self.usuario)
@@ -393,9 +433,11 @@ class ImportacaoServiceTests(TestCase):
     def test_conta_preseleciona_titulo_exato(self):
         documento = OFXParser.parse(OFX_CONTA)
         registro = documento.transacoes[0]
+        categoria = Categoria.objects.create(usuario=self.usuario, nome="Categoria do título")
         titulo = self.criar_titulo_previsto(
             str(abs(registro.valor)),
             registro.data,
+            categoria=categoria,
             tipo=Titulo.Tipo.RECEBER if registro.valor > 0 else Titulo.Tipo.PAGAR,
         )
 
@@ -404,6 +446,7 @@ class ImportacaoServiceTests(TestCase):
         self.assertEqual(item.status, ItemImportacao.Status.PENDENTE)
         self.assertEqual(item.acao, ItemImportacao.Acao.VINCULAR)
         self.assertEqual(item.titulo_alvo_id, titulo.pk)
+        self.assertEqual(item.categoria_id, categoria.pk)
         self.assertIsNone(item.evento_id)
 
     def test_conta_com_destinos_exatos_multiplos_exige_selecao_manual(self):
@@ -546,7 +589,9 @@ class ImportacaoServiceTests(TestCase):
         self.assertEqual(resposta_ajax.json()["item"]["aviso_ciclo"], "")
 
     def test_salvar_vinculo_cartao_por_ajax_aceita_parcela_prevista(self):
-        parcela = self.criar_parcela_prevista_cartao()
+        categoria_vinculo = Categoria.objects.create(usuario=self.usuario, nome="Categoria vinculada")
+        categoria_informada = Categoria.objects.create(usuario=self.usuario, nome="Categoria informada")
+        parcela = self.criar_parcela_prevista_cartao(categoria=categoria_vinculo)
         lote = self.criar_lote(OFXParser.parse(OFX_CARTAO), ciclo="2026-10")
         item = lote.itens.get()
         self.client.force_login(self.usuario)
@@ -559,7 +604,7 @@ class ImportacaoServiceTests(TestCase):
                 "valor_revisado": "",
                 "descricao_revisada": "",
                 "natureza": NaturezaEvento.DESPESA,
-                "categoria": "",
+                "categoria": categoria_informada.pk,
                 "pessoa": "",
                 "ambito": Ambito.NAO_DEFINIDO,
                 "acao": ItemImportacao.Acao.VINCULAR,
@@ -578,6 +623,8 @@ class ImportacaoServiceTests(TestCase):
         self.assertEqual(item.parcela_id, parcela.pk)
         self.assertEqual(item.evento_id, parcela.compra.evento_id)
         self.assertEqual(item.status, ItemImportacao.Status.CONCILIADO)
+        self.assertEqual(item.categoria_id, categoria_vinculo.pk)
+        self.assertEqual(resposta.json()["item"]["categoria"], categoria_vinculo.pk)
 
     def test_vinculo_manual_cartao_realiza_parcela_sem_duplicar_evento(self):
         parcela = self.criar_parcela_prevista_cartao()
@@ -763,6 +810,29 @@ ENCODING:USASCII
             self.assertEqual(titulo.status, Titulo.Status.LIQUIDADO)
             self.assertEqual(titulo.evento.situacao, Situacao.PREVISTO)
 
+    def test_vinculo_multiplo_usa_categoria_apenas_quando_unica_e_comum(self):
+        categoria = Categoria.objects.create(usuario=self.usuario, nome="Recebimentos")
+        documento = OFXParser.parse(OFX_CONTA.replace(b"2500.00", b"9042.00"))
+        lote = self.criar_lote(documento, nome="credito-multiplo-categorizado.ofx")
+        titulos = [
+            self.criar_titulo_previsto("7000.00", date(2026, 10, 16), categoria=categoria),
+            self.criar_titulo_previsto("1500.00", date(2026, 10, 16), categoria=categoria),
+            self.criar_titulo_previsto("542.00", date(2026, 10, 16), categoria=categoria),
+        ]
+        item = lote.itens.get(valor=Decimal("9042.00"))
+        item.acao = ItemImportacao.Acao.VINCULAR
+
+        selecionar_vinculo_item(item, self.usuario, titulos_ids=[titulo.pk for titulo in titulos])
+
+        self.assertEqual(item.categoria_id, categoria.pk)
+
+        outra_categoria = Categoria.objects.create(usuario=self.usuario, nome="Outros recebimentos")
+        rateio = titulos[-1].evento.rateios.get()
+        rateio.categoria = outra_categoria
+        rateio.save(update_fields=["categoria"])
+        selecionar_vinculo_item(item, self.usuario, titulos_ids=[titulo.pk for titulo in titulos])
+        self.assertIsNone(item.categoria_id)
+
     def test_vinculo_multiplo_revalida_saldo_alterado_antes_da_confirmacao(self):
         lote, _, titulos, _ = self._selecionar_titulos_multiplos_9042()
         titulos[0].saldo_aberto = Decimal("6999.00")
@@ -909,6 +979,8 @@ ENCODING:USASCII
         selecionar_vinculo_item(item, self.usuario, titulo_id=titulo.pk)
         item.save()
 
+        self.assertIsNone(item.categoria_id)
+
         confirmar_importacao(lote.pk, self.usuario)
 
         item.refresh_from_db()
@@ -975,6 +1047,7 @@ ENCODING:USASCII
         self.assertEqual(lote.status, Importacao.Status.EM_REVISAO)
 
     def test_trocar_vinculo_manual_por_criar_limpa_destino(self):
+        categoria = Categoria.objects.create(usuario=self.usuario, nome="Categoria do vínculo")
         evento = EventoFinanceiro.objects.create(
             usuario=self.usuario,
             natureza=NaturezaEvento.DESPESA,
@@ -983,6 +1056,7 @@ ENCODING:USASCII
             valor=Decimal("125.50"),
             situacao=Situacao.REALIZADO,
         )
+        RateioCategoria.objects.create(evento=evento, categoria=categoria, valor=evento.valor)
         movimento = MovimentoConta.objects.create(
             conta=self.conta,
             evento=evento,
@@ -1000,6 +1074,12 @@ ENCODING:USASCII
 
         self.assertIsNone(item.evento_id)
         self.assertIsNone(item.movimento_conta_id)
+        self.assertEqual(item.categoria_id, categoria.pk)
+
+        item.acao = ItemImportacao.Acao.VINCULAR
+        selecionar_vinculo_item(item, self.usuario, movimento_id=movimento.pk)
+        selecionar_vinculo_item(item, self.usuario, remover_vinculo=True)
+        self.assertIsNone(item.categoria_id)
 
     def test_busca_prioriza_titulo_por_valor_data_e_categoria(self):
         categoria = Categoria.objects.create(usuario=self.usuario, nome="Serviços", tipo=Categoria.Tipo.RECEITA)
@@ -1132,11 +1212,55 @@ class ImportacaoViewSecurityTests(TestCase):
         self.assertContains(resposta, "Prestação de serviços (Receitas)", count=2)
         self.assertContains(
             resposta,
-            f'<option value="{filha.pk}" selected>Prestação de serviços (Receitas)</option>',
+            f'<option value="{filha.pk}" data-category-active="true" selected>Prestação de serviços (Receitas)</option>',
             html=True,
         )
         self.assertIn("Prestação de serviços (Receitas)", str(formulario_item["categoria"]))
         self.assertIn("Prestação de serviços (Receitas)", str(formulario_lote["categoria"]))
+
+    def test_revisao_exibe_categoria_inativa_do_vinculo_sem_liberar_selecao(self):
+        categoria = Categoria.objects.create(
+            usuario=self.dono,
+            nome="Categoria histórica",
+            ativa=False,
+        )
+        evento = EventoFinanceiro.objects.create(
+            usuario=self.dono,
+            natureza=NaturezaEvento.DESPESA,
+            descricao="Movimento histórico",
+            data=date(2026, 10, 5),
+            valor=Decimal("50.00"),
+            situacao=Situacao.REALIZADO,
+        )
+        RateioCategoria.objects.create(evento=evento, categoria=categoria, valor=evento.valor)
+        movimento = MovimentoConta.objects.create(
+            conta=self.lote.conta,
+            evento=evento,
+            data_efetiva=evento.data,
+            valor=Decimal("-50.00"),
+        )
+        ItemImportacao.objects.create(
+            importacao=self.lote,
+            posicao=1,
+            data=evento.data,
+            valor=Decimal("-50.00"),
+            descricao_original=evento.descricao,
+            acao=ItemImportacao.Acao.VINCULAR,
+            status=ItemImportacao.Status.PENDENTE,
+            evento=evento,
+            movimento_conta=movimento,
+            categoria=categoria,
+        )
+        self.client.force_login(self.dono)
+
+        resposta = self.client.get(reverse("importacao_revisao", args=[self.lote.pk]))
+
+        self.assertContains(
+            resposta,
+            f'<option value="{categoria.pk}" data-category-active="false" selected disabled>Categoria histórica (inativa)</option>',
+            html=True,
+        )
+        self.assertContains(resposta, "Categoria definida pelo lançamento vinculado.")
 
     def test_busca_de_candidatos_exige_proprietario_do_lote(self):
         item = ItemImportacao.objects.create(
